@@ -1,0 +1,196 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #F8F9FA;
+    color: #6B7280;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background-color: rgba(255, 182, 193, 0.2);
+    color: #1F2937;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', sans-serif;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.08) transparent;
+  }
+}
+
+@layer components {
+  .card {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    transition: all 0.2s;
+  }
+
+  .card-hover:hover {
+    border-color: rgba(255, 182, 193, 0.3);
+    box-shadow: 0 4px 12px rgba(255, 182, 193, 0.1);
+  }
+
+  .card-glass {
+    background-color: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(24px);
+    border: 1px solid #E5E7EB;
+    border-radius: 1rem;
+  }
+
+  .input-field {
+    width: 100%;
+    padding: 0.625rem 1rem;
+    background-color: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 0.75rem;
+    color: #1F2937;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    outline: none;
+  }
+
+  .input-field::placeholder {
+    color: rgba(107, 114, 128, 0.5);
+  }
+
+  .input-field:focus {
+    border-color: rgba(255, 182, 193, 0.5);
+    box-shadow: 0 0 0 2px rgba(255, 182, 193, 0.1);
+  }
+
+  .input-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6B7280;
+    margin-bottom: 0.375rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .btn-pink {
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    background-color: rgba(255, 182, 193, 0.15);
+    color: #D6577A;
+    border: 1px solid rgba(255, 182, 193, 0.3);
+  }
+
+  .btn-pink:hover {
+    background-color: rgba(255, 182, 193, 0.25);
+    border-color: rgba(255, 182, 193, 0.5);
+  }
+
+  .btn-pink:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .btn-cream {
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    background-color: rgba(245, 230, 211, 0.4);
+    color: #7A6B5B;
+    border: 1px solid rgba(245, 230, 211, 0.6);
+  }
+
+  .btn-cream:hover {
+    background-color: rgba(245, 230, 211, 0.6);
+    border-color: rgba(245, 230, 211, 0.8);
+  }
+
+  .btn-cream:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .btn-danger {
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    background-color: rgba(255, 71, 119, 0.1);
+    color: #CC2952;
+    border: 1px solid rgba(255, 71, 119, 0.2);
+  }
+
+  .btn-danger:hover {
+    background-color: rgba(255, 71, 119, 0.2);
+    border-color: rgba(255, 71, 119, 0.4);
+  }
+
+  .btn-danger:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    background-image: linear-gradient(to right, #FFB6C1, #FF8DA1);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+@keyframes sos-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 71, 119, 0.3), 0 0 40px rgba(255, 71, 119, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 71, 119, 0.5), 0 0 60px rgba(255, 71, 119, 0.2);
+  }
+}
+
+.sos-glow {
+  animation: sos-glow 2s infinite ease-in-out;
+}
