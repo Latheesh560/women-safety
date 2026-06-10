@@ -107,10 +107,10 @@ const CommunitySupportPage = () => {
     <div className="p-4 md:p-6 space-y-6">
       <header className="mb-2">
         <h1 className="text-xl md:text-2xl font-bold text-slate-800 flex items-center gap-2.5">
-          <Users className="w-6 h-6 text-[#7BC4A8]" /> Community Forums & Support
+          <Users className="w-6 h-6 text-[#7BC4A8]" /> Community Stories & Support
         </h1>
         <p className="text-sm text-slate-600 mt-0.5">
-          Engage with verified peers. Share crowdsourced safety reports, coordinate transit walks, and build supportive networks.
+          A safe haven to share your experiences, seek advice, and find strength in each other. Your voice matters here.
         </p>
       </header>
 
@@ -120,8 +120,8 @@ const CommunitySupportPage = () => {
             <div className="flex items-center gap-2">
               <Hash className="w-4 h-4 text-primary-dark" />
               <div>
-                <span className="font-bold text-sm text-slate-800 block">#safety-bulletins</span>
-                <span className="text-[10px] text-slate-500 font-semibold">Real-time community safety channel</span>
+                <span className="font-bold text-sm text-slate-800 block">#share-your-story</span>
+                <span className="text-[10px] text-slate-500 font-semibold">A safe, judgment-free space to connect</span>
               </div>
             </div>
             <div className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${
@@ -170,8 +170,8 @@ const CommunitySupportPage = () => {
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center text-slate-500">
                 <MessageSquare className="w-10 h-10 text-slate-400 mb-3" />
-                <h3 className="font-bold text-slate-800 mb-1">No Messages Yet</h3>
-                <p className="text-xs max-w-xs text-slate-500">Be the first to share an update with the community!</p>
+                <h3 className="font-bold text-slate-800 mb-1">Your Story Matters</h3>
+                <p className="text-xs max-w-xs text-slate-500">Share your experience, ask for advice, or simply say hello. You are not alone.</p>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -184,7 +184,7 @@ const CommunitySupportPage = () => {
                 required
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder="Type a message to the community..."
+                placeholder="Share your story, ask for advice, or offer support..."
                 className="input-field flex-1 bg-white/80 border-slate-200/80 focus:border-primary/60 text-slate-800"
                 disabled={sending}
               />
@@ -202,14 +202,14 @@ const CommunitySupportPage = () => {
         <section className="lg:col-span-4 space-y-5">
           <div className="bg-white/70 backdrop-blur-md border border-white/60 shadow-[0_8px_32px_rgba(255,182,193,0.08)] rounded-[20px] p-5">
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" /> Channel Protocols
+              <ShieldCheck className="w-4 h-4 text-emerald-600" /> Safe Space Guidelines
             </h3>
             <div className="space-y-4">
               {[
-                { num: '1', title: 'Anonymity & Safety First', desc: 'Do not post precise coordinates of your home or private pins.' },
-                { num: '2', title: 'Verified Security Bulletins Only', desc: 'Only log verified environmental status or lighting reports.' },
-                { num: '3', title: 'Secure Peer Escorts', desc: 'Meet only in illuminated, police-supervised hubs.' },
-                { num: '4', title: 'Unconditional Support & Civility', desc: 'Treat every peer with utmost empathy and respect.' },
+                { num: '1', title: 'Empathy & Respect First', desc: 'Treat every story with kindness and without judgment. We are here to listen.' },
+                { num: '2', title: 'Your Privacy Matters', desc: 'Share only what you are comfortable with. Avoid posting personal contact information.' },
+                { num: '3', title: 'Trigger Warnings', desc: 'If your story contains sensitive content, please consider adding a [TW] at the beginning.' },
+                { num: '4', title: 'Unconditional Support', desc: 'Uplift and empower one another. Together, we build a stronger community.' },
               ].map((rule) => (
                 <div key={rule.num} className="flex gap-3.5 items-start text-xs text-slate-600 font-medium">
                   <div className="w-6 h-6 rounded bg-emerald-500/10 text-emerald-700 font-extrabold text-xs shrink-0 flex items-center justify-center mt-0.5 border border-emerald-500/20">

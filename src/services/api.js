@@ -1,5 +1,5 @@
 // API Service for Women Safety App — Real Backend Only (No Simulation)
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
 
 // HTTP request wrapper with auth token injection and error handling
 const request = async (endpoint, options = {}) => {

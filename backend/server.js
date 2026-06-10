@@ -33,7 +33,7 @@ const corsOptions = {
     if (!origin) return callback(null, true);
     
     const isAllowed = allowedOrigins.includes(origin) || 
-                      /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|.*\.ngrok-free\.app|.*\.ngrok\.io|.*\.localtunnel\.me|.*\.loca\.lt|.*\.pinggy(-free)?\.link)(:\d+)?$/.test(origin);
+                      /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|.*\.ngrok-free\.app|.*\.ngrok\.io|.*\.localtunnel\.me|.*\.loca\.lt|.*\.pinggy(-free)?\.link|.*\.vercel\.app)(:\d+)?$/.test(origin);
                       
     if (isAllowed) {
       return callback(null, true);
