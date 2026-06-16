@@ -6,10 +6,14 @@ const request = async (endpoint, options = {}) => {
   const token = localStorage.getItem('token');
 
   const headers = {
-    'Content-Type': 'application/json',
     ...(token && { 'Authorization': `Bearer ${token}` }),
     ...options.headers,
   };
+
+  // Only set Content-Type to JSON if it's not FormData
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+  }
 
   const config = {
     ...options,
@@ -44,5 +48,9 @@ const request = async (endpoint, options = {}) => {
 // Expose API client methods
 export const api = {
   get: (endpoint, options = {}) => request(endpoint, { ...options, method: 'GET' }),
-  post: (endpoint, body, options = {}) => request(endpoint, { ...options, method: 'POST', body: JSON.stringify(body) }),
+  post: (endpoint, body, options = {}) => request(endpoint, { 
+    ...options, 
+    method: 'POST', 
+    body: body instanceof FormData ? body : JSON.stringify(body) 
+  }),
 };

@@ -10,6 +10,7 @@ const IncidentSchema = new mongoose.Schema({
   status: { type: String, enum: ['Reported', 'Investigating', 'Resolved', 'Dismissed'], default: 'Reported' },
   lat: { type: String, default: '' },
   lon: { type: String, default: '' },
+  mediaUrl: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
 });
 

@@ -9,7 +9,8 @@ import {
   ChevronRight,
   Send,
   Loader2,
-  FileCheck2
+  FileCheck2,
+  Image as ImageIcon
 } from 'lucide-react';
 
 const IncidentReportPage = () => {
@@ -24,10 +25,17 @@ const IncidentReportPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [reportedId, setReportedId] = useState('');
+  const [mediaFile, setMediaFile] = useState(null);
   const navigate = useNavigate();
 
   const incidentTypes = ['Harassment', 'Assault', 'Theft', 'Suspicious', 'Other'];
   const severityLevels = ['Low', 'Medium', 'High', 'Critical'];
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setMediaFile(e.target.files[0]);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({
@@ -48,7 +56,13 @@ const IncidentReportPage = () => {
 
     setLoading(true);
     try {
-      const data = await api.post('/incidents/report', formData);
+      const uploadData = new FormData();
+      Object.keys(formData).forEach(key => uploadData.append(key, formData[key]));
+      if (mediaFile) {
+        uploadData.append('media', mediaFile);
+      }
+
+      const data = await api.post('/incidents/report', uploadData);
       if (data.success) {
         setSuccess(true);
         setReportedId(data.report.id);
@@ -59,6 +73,7 @@ const IncidentReportPage = () => {
           type: 'Harassment',
           severity: 'Medium',
         });
+        setMediaFile(null);
       }
     } catch (err) {
       setError('An error occurred while logging your report. Please try again.');
@@ -195,8 +210,21 @@ const IncidentReportPage = () => {
                   ></textarea>
                 </div>
 
+                <div>
+                  <label className="input-label flex items-center gap-1.5 text-slate-600 font-bold">
+                    <ImageIcon className="w-3.5 h-3.5 text-primary-dark" /> Attach Media Evidence
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    onChange={handleFileChange}
+                    className="input-field bg-white/80 border-slate-200/80 focus:border-primary/60 text-slate-800 file:mr-4 file:py-1.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-500/10 file:text-primary-dark hover:file:bg-pink-500/20 cursor-pointer"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1.5 ml-1">Optional. Upload an image or short video clip for evidence.</p>
+                </div>
+
                 <button 
-                  type="submit" 
+                  type="submit"  
                   disabled={loading} 
                   className="w-full py-3 px-4 bg-gradient-to-r from-primary-dark to-primary hover:from-primary hover:to-accent text-white font-bold rounded-xl shadow-[0_4px_14px_rgba(255,141,161,0.3)] hover:shadow-[0_6px_20px_rgba(255,141,161,0.4)] flex justify-center items-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none mt-2"
                 >

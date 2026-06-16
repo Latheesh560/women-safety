@@ -1,14 +1,53 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
 import TopHeader from './TopHeader';
 import ChatbotWidget from './ChatbotWidget';
+import { connectSocket } from '../services/socket';
+import { useNotificationStore } from '../context/notificationStore';
+import { useAuthStore } from '../context/authStore';
 
 const DashboardLayout = ({ children, title = 'Home' }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const location = useLocation();
+  const addNotification = useNotificationStore(state => state.addNotification);
+  const user = useAuthStore(state => state.user);
+
+  useEffect(() => {
+    const socket = connectSocket();
+
+    const handleNewIncident = (incident) => {
+      if (incident.severity === 'High' || incident.severity === 'Critical') {
+        addNotification({
+          type: 'alert',
+          title: `${incident.severity} Severity Incident`,
+          message: `${incident.type} reported near ${incident.location}`,
+          link: '/safe-routes'
+        });
+      }
+    };
+
+    const handleNewMessage = (msg) => {
+      if (msg.replyTo && user && msg.replyTo.username === user.name && msg.username !== user.name) {
+        addNotification({
+          type: 'community',
+          title: 'New Reply',
+          message: `${msg.username} replied to your message.`,
+          link: '/community'
+        });
+      }
+    };
+
+    socket.on('new_incident', handleNewIncident);
+    socket.on('new_message', handleNewMessage);
+
+    return () => {
+      socket.off('new_incident', handleNewIncident);
+      socket.off('new_message', handleNewMessage);
+    };
+  }, [user, addNotification]);
 
   const handleToggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);

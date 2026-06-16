@@ -9,6 +9,26 @@ const nodemailer = require('nodemailer');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Ensure uploads directory exists
+const uploadDir = path.join(__dirname, 'uploads', 'incidents');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage: storage });
 
 // Models
 const User = require('./models/User');
@@ -57,6 +77,7 @@ app.use((req, res, next) => {
 });
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Rate limiting for auth routes
 const authLimiter = rateLimit({
@@ -293,13 +314,61 @@ app.post('/api/sos/fake-call', authMiddleware, (req, res) => {
 
 // ---------- INCIDENT ROUTES ----------
 
-app.post('/api/incidents/report', authMiddleware, async (req, res) => {
+app.post('/api/incidents/report', authMiddleware, upload.single('media'), async (req, res) => {
   try {
+    let mediaUrl = '';
+    if (req.file) {
+      mediaUrl = `/uploads/incidents/${req.file.filename}`;
+    }
+
     const newIncident = new Incident({
       ...req.body,
+      mediaUrl,
       userId: req.userId
     });
     await newIncident.save();
+
+    // Broadcast new incident to all connected clients
+    io.emit('new_incident', newIncident);
+
+    // Send email to authority if configured
+    const authorityEmail = process.env.AUTHORITY_EMAIL || process.env.SMTP_USER;
+    if (authorityEmail && authorityEmail !== 'your_gmail@gmail.com') {
+      const transporter = createMailTransporter();
+      const serverUrl = process.env.FRONTEND_URL || 'http://localhost:5005';
+      const fullMediaUrl = mediaUrl ? `${serverUrl}${mediaUrl}` : 'No media attached';
+      
+      const mailOptions = {
+        from: `"${process.env.SMTP_FROM_NAME || 'SheShield Reports'}" <${process.env.SMTP_USER}>`,
+        to: authorityEmail,
+        subject: `🚨 INCIDENT REPORT: ${newIncident.title}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #10B981, #34D399); padding: 20px; border-radius: 12px; text-align: center; color: white;">
+              <h1 style="margin: 0; font-size: 24px;">📝 NEW INCIDENT REPORT</h1>
+              <p style="margin: 8px 0 0; font-size: 14px; opacity: 0.9;">SheShield Women Safety System</p>
+            </div>
+            
+            <div style="background: #F8FAFC; padding: 24px; border-radius: 12px; margin-top: 16px; border: 1px solid #E2E8F0;">
+              <p style="margin: 0 0 8px; font-size: 14px; color: #333;"><strong>Type:</strong> ${newIncident.type}</p>
+              <p style="margin: 0 0 8px; font-size: 14px; color: #333;"><strong>Severity:</strong> ${newIncident.severity}</p>
+              <p style="margin: 0 0 8px; font-size: 14px; color: #333;"><strong>Location:</strong> ${newIncident.location}</p>
+              <p style="margin: 0 0 8px; font-size: 14px; color: #333;"><strong>Description:</strong> ${newIncident.description}</p>
+              <p style="margin: 0 0 16px; font-size: 14px; color: #333;"><strong>Media Attachment:</strong> ${mediaUrl ? `<a href="${fullMediaUrl}" style="color: #10B981; font-weight: bold;">Link</a> (also attached to this email)` : 'None'}</p>
+            </div>
+          </div>
+        `,
+        attachments: req.file ? [
+          {
+            filename: req.file.originalname,
+            path: req.file.path
+          }
+        ] : []
+      };
+      
+      transporter.sendMail(mailOptions).catch(err => console.error('Failed to send authority email:', err));
+    }
+
     res.json({ success: true, report: newIncident });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
