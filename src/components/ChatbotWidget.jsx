@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, X, Send, Bot, User, Loader2 } from 'lucide-react';
+import { MessageCircle, X, Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
 import { api } from '../services/api';
 
 const ChatbotWidget = () => {
@@ -57,12 +57,21 @@ const ChatbotWidget = () => {
     <>
       {/* Floating Chat Button */}
       <motion.button
-        whileHover={{ scale: 1.05 }}
+        animate={{ y: [0, -6, 0] }}
+        transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+        whileHover={{ scale: 1.05, y: 0 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 right-6 p-4 rounded-full bg-pink-500 text-white shadow-lg hover:bg-pink-600 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 z-40 ${isOpen ? 'hidden' : 'flex'}`}
+        className={`fixed bottom-6 right-6 p-4 rounded-full bg-gradient-to-r from-pink-500 to-rose-400 text-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:shadow-[0_8px_30px_rgb(236,72,153,0.3)] focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 z-40 ${isOpen ? 'hidden' : 'flex'} items-center justify-center`}
       >
-        <MessageCircle className="w-6 h-6" />
+        <Bot className="w-6 h-6" />
+        <motion.div
+          animate={{ rotate: [0, 15, -10, 0], scale: [1, 1.2, 1] }}
+          transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+          className="absolute -top-1 -right-1"
+        >
+          <Sparkles className="w-4 h-4 text-yellow-300" />
+        </motion.div>
       </motion.button>
 
       {/* Chat Window */}
