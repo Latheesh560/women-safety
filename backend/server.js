@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const nodemailer = require('nodemailer');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Models
 const User = require('./models/User');
@@ -401,6 +402,47 @@ app.post('/api/user/settings', authMiddleware, async (req, res) => {
     res.json(settings);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------- AI BOT ROUTES ----------
+
+app.post('/api/bot/chat', authMiddleware, async (req, res) => {
+  try {
+    const { message, history } = req.body;
+    
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ success: false, error: 'GEMINI_API_KEY is not configured in backend.' });
+    }
+
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-2.5-flash",
+      systemInstruction: "You are the 'SheShield Safety Assistant', a supportive, empathetic, and knowledgeable AI companion integrated into a women's safety app. Your main goal is to provide safety advice, emergency preparedness tips, emotional support, and general guidance. Keep responses concise, helpful, and reassuring. Do not hallucinate emergency services phone numbers; instead, tell them to use the SOS button or call local authorities."
+    });
+
+    // Format history for Gemini
+    let formattedHistory = history ? history.map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.text }]
+    })) : [];
+
+    // Gemini requires the first message in history to be from 'user'
+    while (formattedHistory.length > 0 && formattedHistory[0].role === 'model') {
+      formattedHistory.shift();
+    }
+
+    const chat = model.startChat({
+      history: formattedHistory,
+    });
+
+    const result = await chat.sendMessage(message);
+    const responseText = result.response.text();
+
+    res.json({ success: true, response: responseText });
+  } catch (err) {
+    console.error('Bot Error:', err);
+    res.status(500).json({ success: false, error: 'Failed to communicate with AI Bot.' });
   }
 });
 

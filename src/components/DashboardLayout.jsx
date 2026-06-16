@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
 import TopHeader from './TopHeader';
+import ChatbotWidget from './ChatbotWidget';
 
 const DashboardLayout = ({ children, title = 'Home' }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -57,6 +58,8 @@ const DashboardLayout = ({ children, title = 'Home' }) => {
           </AnimatePresence>
         </main>
       </div>
+      
+      <ChatbotWidget />
     </div>
   );
 };
