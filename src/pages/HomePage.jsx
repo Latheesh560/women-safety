@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../context/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
+import ChatbotWidget from '../components/ChatbotWidget';
 import {
   Radio,
   MapPin,
@@ -701,6 +702,8 @@ const HomePage = () => {
           <span>SSL Tunnel Secured</span>
         </div>
       </motion.footer>
+
+      <ChatbotWidget />
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
   Send,
@@ -12,12 +13,15 @@ import {
   Hash,
   Loader2,
   Wifi,
-  WifiOff
+  WifiOff,
+  Reply,
+  X
 } from 'lucide-react';
 
 const CommunitySupportPage = () => {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
+  const [replyingTo, setReplyingTo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -82,9 +86,18 @@ const CommunitySupportPage = () => {
     if (!inputText.trim()) return;
     setSending(true);
     try {
+      const payload = { content: inputText };
+      if (replyingTo) {
+        payload.replyTo = {
+          _id: replyingTo._id || replyingTo.id,
+          username: replyingTo.username,
+          content: replyingTo.content
+        };
+      }
       // Post to API — server will broadcast via Socket.IO to all clients
-      await api.post('/community/message', { content: inputText });
+      await api.post('/community/message', payload);
       setInputText('');
+      setReplyingTo(null);
     } catch (err) {
       console.error('Failed to post message.', err);
     } finally {
@@ -150,22 +163,46 @@ const CommunitySupportPage = () => {
               </div>
             ) : messages.length > 0 ? (
               messages.map((msg) => (
-                <div key={msg._id || msg.id} className="flex gap-3.5 items-start p-3 bg-white/70 hover:bg-white/95 border border-pink-100/30 hover:border-pink-200/50 rounded-2xl transition-all duration-200 shadow-[0_2px_12px_rgba(255,182,193,0.02)]">
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-dark to-[#FFB6C1] flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-sm shadow-primary-dark/30">
-                    {getInitials(msg.username)}
+                <motion.div 
+                  key={msg._id || msg.id}
+                  drag="x"
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.15}
+                  onDragEnd={(e, info) => {
+                    if (info.offset.x > 50) {
+                      setReplyingTo(msg);
+                    }
+                  }}
+                  className="relative group touch-pan-y"
+                >
+                  <div className="absolute left-[-35px] top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
+                    <button onClick={() => setReplyingTo(msg)} className="p-1.5 bg-pink-100 text-pink-600 rounded-full hover:bg-pink-200">
+                      <Reply className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                  <div className="space-y-1 flex-1 min-w-0">
-                    <div className="flex items-baseline justify-between gap-2.5">
-                      <strong className="text-sm text-slate-800 font-bold">{msg.username}</strong>
-                      <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 shrink-0">
-                        <Clock className="w-3 h-3 text-primary-dark" /> {formatTime(msg.timestamp)}
-                      </span>
+                  <div className="flex gap-3.5 items-start p-3 bg-white/70 hover:bg-white/95 border border-pink-100/30 hover:border-pink-200/50 rounded-2xl transition-colors duration-200 shadow-[0_2px_12px_rgba(255,182,193,0.02)]">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-dark to-[#FFB6C1] flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-sm shadow-primary-dark/30">
+                      {getInitials(msg.username)}
                     </div>
-                    <p className="text-xs sm:text-sm text-slate-750 leading-relaxed break-words font-medium">
-                      {msg.content}
-                    </p>
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <div className="flex items-baseline justify-between gap-2.5">
+                        <strong className="text-sm text-slate-800 font-bold">{msg.username}</strong>
+                        <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 shrink-0">
+                          <Clock className="w-3 h-3 text-primary-dark" /> {formatTime(msg.timestamp)}
+                        </span>
+                      </div>
+                      {msg.replyTo && (
+                        <div className="mt-1 mb-2 p-2 bg-pink-50/50 border-l-2 border-pink-300 rounded-r-lg text-xs">
+                          <div className="font-bold text-pink-700 mb-0.5">{msg.replyTo.username}</div>
+                          <div className="text-slate-600 truncate">{msg.replyTo.content}</div>
+                        </div>
+                      )}
+                      <p className="text-xs sm:text-sm text-slate-750 leading-relaxed break-words font-medium">
+                        {msg.content}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                </motion.div>
               ))
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center text-slate-500">
@@ -177,7 +214,25 @@ const CommunitySupportPage = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="p-4 bg-white/60 border-t border-pink-100/30 backdrop-blur-md">
+          <div className="p-4 bg-white/60 border-t border-pink-100/30 backdrop-blur-md flex flex-col gap-2">
+            <AnimatePresence>
+              {replyingTo && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, height: 0 }}
+                  animate={{ opacity: 1, y: 0, height: 'auto' }}
+                  exit={{ opacity: 0, y: 10, height: 0 }}
+                  className="flex items-center justify-between bg-pink-50/80 px-3 py-2 rounded-lg border border-pink-100"
+                >
+                  <div className="flex flex-col overflow-hidden">
+                    <span className="text-[10px] font-bold text-pink-600 flex items-center gap-1"><Reply className="w-3 h-3" /> Replying to {replyingTo.username}</span>
+                    <span className="text-xs text-slate-500 truncate mt-0.5">{replyingTo.content}</span>
+                  </div>
+                  <button type="button" onClick={() => setReplyingTo(null)} className="p-1 text-slate-400 hover:text-rose-500 rounded-full hover:bg-white/50">
+                    <X className="w-4 h-4" />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
             <form onSubmit={handleSendMessage} className="flex gap-3">
               <input
                 type="text"

@@ -327,12 +327,13 @@ app.get('/api/community/messages', async (req, res) => {
 });
 
 app.post('/api/community/message', authMiddleware, async (req, res) => {
-  const { content } = req.body;
+  const { content, replyTo } = req.body;
   try {
     const user = await User.findById(req.userId);
     const newPost = new Post({
       username: user ? user.name : 'Anonymous',
       content,
+      replyTo: replyTo || null
     });
     await newPost.save();
 
@@ -474,7 +475,7 @@ io.on('connection', (socket) => {
 // ==========================================
 // START SERVER
 // ==========================================
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🛡️  SheShield Backend running on port ${PORT}`);
   console.log(`📡 Socket.IO ready for real-time connections`);
   
