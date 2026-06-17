@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
 import TopHeader from './TopHeader';
 import ChatbotWidget from './ChatbotWidget';
+import VoiceSOSWidget from './VoiceSOSWidget';
 import { connectSocket } from '../services/socket';
 import { useNotificationStore } from '../context/notificationStore';
 import { useAuthStore } from '../context/authStore';
@@ -99,6 +100,7 @@ const DashboardLayout = ({ children, title = 'Home' }) => {
       </div>
       
       <ChatbotWidget />
+      <VoiceSOSWidget />
     </div>
   );
 };

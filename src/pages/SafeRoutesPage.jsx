@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { routeService } from '../services/routeService';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { api } from '../services/api';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import {
@@ -77,6 +78,7 @@ const SafeRoutesPage = () => {
   const [mapBounds, setMapBounds] = useState([]);
   const [policeStations, setPoliceStations] = useState([]);
   const [hospitals, setHospitals] = useState([]);
+  const [dangerZones, setDangerZones] = useState([]);
   const [safetyAnalysis, setSafetyAnalysis] = useState(null);
   const [steps, setSteps] = useState([]);
 
@@ -219,6 +221,7 @@ const SafeRoutesPage = () => {
     setMapBounds([]);
     setPoliceStations([]);
     setHospitals([]);
+    setDangerZones([]);
     setSafetyAnalysis(null);
     setSteps([]);
 
@@ -229,7 +232,15 @@ const SafeRoutesPage = () => {
       setSourceCoords([start.lat, start.lon]);
       setDestCoords([end.lat, end.lon]);
 
-      const routeFeature = await routeService.getRoute(start, end);
+      let incidents = [];
+      try {
+        incidents = await api.get('/incidents/all');
+        setDangerZones(incidents);
+      } catch (e) {
+        console.error("Could not fetch danger zones", e);
+      }
+
+      const routeFeature = await routeService.getRoute(start, end, incidents);
       setRouteData(routeFeature);
 
       const coords = routeFeature.geometry.coordinates.map(coord => [coord[1], coord[0]]);
@@ -488,6 +499,26 @@ const SafeRoutesPage = () => {
                   </Popup>
                 </Marker>
               ))}
+
+              {dangerZones.map((inc, i) => {
+                if (!inc.lat || !inc.lon) return null;
+                return (
+                  <Circle 
+                    key={`danger-${i}`} 
+                    center={[parseFloat(inc.lat), parseFloat(inc.lon)]} 
+                    radius={111} 
+                    pathOptions={{ color: 'red', fillColor: '#ef4444', fillOpacity: 0.3, weight: 1 }}
+                  >
+                    <Popup>
+                      <div className="text-xs font-bold text-rose-600 mb-1 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> Danger Zone (Avoided)
+                      </div>
+                      <div className="text-[10px] text-slate-700"><strong>Type:</strong> {inc.type}</div>
+                      <div className="text-[10px] text-slate-700"><strong>Severity:</strong> {inc.severity}</div>
+                    </Popup>
+                  </Circle>
+                );
+              })}
             </MapContainer>
 
             <div className="absolute top-6 right-6 z-[1000] bg-white/85 border border-pink-100/60 px-3.5 py-2 rounded-xl flex items-center gap-2 text-xs font-bold text-slate-700 shadow-md backdrop-blur-md">
@@ -512,6 +543,10 @@ const SafeRoutesPage = () => {
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 bg-rose-600 rounded-full flex items-center justify-center text-[8px] font-black text-white shadow-sm shadow-rose-500/30">+</div>
                 <span className="text-slate-700 text-[10px] font-semibold">Hospital</span>
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="w-4 h-4 rounded-full bg-rose-500/30 border border-rose-500"></div>
+                <span className="text-slate-700 text-[10px] font-semibold">Danger Zone (Avoided)</span>
               </div>
             </div>
           </div>

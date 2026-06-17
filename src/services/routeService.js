@@ -35,19 +35,53 @@ export const routeService = {
   },
 
   /**
-   * Get driving route from OpenRouteService
+   * Get foot-walking route from OpenRouteService avoiding danger zones
    */
-  async getRoute(start, end) {
+  async getRoute(start, end, incidents = []) {
     const apiKey = import.meta.env.VITE_OPENROUTESERVICE_KEY;
     if (!apiKey) {
       throw new Error('OpenRouteService API key not found in .env. Please add VITE_OPENROUTESERVICE_KEY.');
     }
     
-    const response = await fetch(`${ORS_URL}?api_key=${apiKey}&start=${start.lon},${start.lat}&end=${end.lon},${end.lat}`);
+    // Create danger zones (polygons) around incidents (approx 100x100m bounding box)
+    const polygons = incidents.map(inc => {
+      const d = 0.001; // ~111 meters
+      const lat = parseFloat(inc.lat);
+      const lon = parseFloat(inc.lon);
+      return [
+        [lon - d, lat - d],
+        [lon + d, lat - d],
+        [lon + d, lat + d],
+        [lon - d, lat + d],
+        [lon - d, lat - d]
+      ];
+    });
+
+    const body = {
+      coordinates: [[start.lon, start.lat], [end.lon, end.lat]]
+    };
+
+    if (polygons.length > 0) {
+      body.options = {
+        avoid_polygons: {
+          type: "MultiPolygon",
+          coordinates: [polygons] // MultiPolygon requires [[[lon, lat]]] format
+        }
+      };
+    }
+
+    const response = await fetch('https://api.openrouteservice.org/v2/directions/foot-walking/geojson', {
+      method: 'POST',
+      headers: {
+        'Authorization': apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
     
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error?.message || 'Failed to fetch route');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || 'Failed to fetch safe route');
     }
     
     const data = await response.json();

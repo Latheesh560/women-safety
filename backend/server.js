@@ -384,6 +384,24 @@ app.get('/api/incidents/my-reports', authMiddleware, async (req, res) => {
   }
 });
 
+app.get('/api/incidents/all', authMiddleware, async (req, res) => {
+  try {
+    // Fetch recent incidents (last 30 days) that have valid coordinates
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const incidents = await Incident.find({
+      createdAt: { $gte: thirtyDaysAgo },
+      lat: { $ne: '' },
+      lon: { $ne: '' }
+    }).sort({ createdAt: -1 }).limit(100);
+    
+    res.json(incidents);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ---------- COMMUNITY ROUTES ----------
 
 app.get('/api/community/messages', async (req, res) => {
