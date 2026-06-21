@@ -14,7 +14,7 @@ const WAKE_WORDS = [
 ];
 
 const VoiceSOSWidget = () => {
-  const [isListening, setIsListening] = useState(false);
+  const [isListening, setIsListening] = useState(true);
   const [error, setError] = useState(null);
   const [supported, setSupported] = useState(true);
   const [lastHeard, setLastHeard] = useState('');
