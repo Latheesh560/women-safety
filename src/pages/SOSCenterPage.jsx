@@ -44,7 +44,27 @@ const SOSCenterPage = () => {
   const activeOscillatorsRef = useRef([]);
 
   useEffect(() => {
+    const handleStatusChanged = (e) => {
+      const { active, lat, lon, message } = e.detail;
+      if (active) {
+        setSosActive(true);
+        setCountdown(5);
+        if (lat && lon) {
+          setGpsCoords({ lat, lon });
+        }
+        if (message) {
+          setSosMessage(message);
+        }
+      } else {
+        setSosActive(false);
+        setCountdown(0);
+      }
+    };
+
+    window.addEventListener('sos-status-changed', handleStatusChanged);
+
     return () => {
+      window.removeEventListener('sos-status-changed', handleStatusChanged);
       clearInterval(countdownInterval.current);
       clearInterval(fakeCallInterval.current);
       subtitleTimeouts.current.forEach(clearTimeout);

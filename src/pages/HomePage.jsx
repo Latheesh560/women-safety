@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../context/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import ChatbotWidget from '../components/ChatbotWidget';
+import VoiceSOSWidget from '../components/VoiceSOSWidget';
 import {
   Radio,
   MapPin,
@@ -704,6 +705,7 @@ const HomePage = () => {
       </motion.footer>
 
       <ChatbotWidget />
+      <VoiceSOSWidget />
     </div>
   );
 };
