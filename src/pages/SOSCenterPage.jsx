@@ -18,7 +18,6 @@ import {
   Wifi,
   Navigation,
   Sparkles,
-  ArrowRight,
   Shield
 } from 'lucide-react';
 
@@ -186,7 +185,7 @@ const SOSCenterPage = () => {
     clearInterval(ringtoneInterval.current);
     if (activeOscillatorsRef.current) {
       activeOscillatorsRef.current.forEach(osc => {
-        try { osc.stop(); } catch (e) {}
+        try { osc.stop(); } catch {}
       });
       activeOscillatorsRef.current = [];
     }
@@ -194,7 +193,7 @@ const SOSCenterPage = () => {
       try {
         masterGainRef.current.gain.setValueAtTime(0, audioCtxRef.current.currentTime);
         masterGainRef.current.disconnect();
-      } catch (e) {}
+      } catch {}
     }
     if (audioCtxRef.current) audioCtxRef.current.close();
   };

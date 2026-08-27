@@ -5,9 +5,7 @@ import {
   FileText,
   MapPin,
   Calendar,
-  AlertTriangle,
   Plus,
-  Loader2,
   Filter,
   RefreshCw
 } from 'lucide-react';
