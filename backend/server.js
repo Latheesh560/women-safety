@@ -13,6 +13,18 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^\+?\d{10,15}$/;
+const ALLOWED_INCIDENT_TYPES = new Set(['Harassment', 'Assault', 'Theft', 'Suspicious', 'Other']);
+const ALLOWED_SEVERITY_TYPES = new Set(['Low', 'Medium', 'High', 'Critical']);
+const ALLOWED_UPLOAD_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'video/mp4',
+  'video/quicktime',
+]);
+
 // Ensure uploads directory exists
 const uploadDir = path.join(__dirname, 'uploads', 'incidents');
 if (!fs.existsSync(uploadDir)) {
@@ -28,7 +40,30 @@ const storage = multer.diskStorage({
     cb(null, uniqueSuffix + path.extname(file.originalname));
   }
 });
-const upload = multer({ storage: storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_UPLOAD_MIME_TYPES.has(file.mimetype)) {
+      return cb(new Error('Unsupported media type. Use JPEG, PNG, WEBP, MP4, or MOV.'));
+    }
+    cb(null, true);
+  },
+});
+
+const normalizeText = (value, maxLength = 500) => String(value || '').trim().slice(0, maxLength);
+
+const normalizePhone = (value) => {
+  const cleaned = String(value || '').replace(/[\s()-]/g, '');
+  return cleaned;
+};
+
+const parseCoordinate = (value, min, max) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  if (num < min || num > max) return null;
+  return num;
+};
 
 // Models
 const User = require('./models/User');
@@ -36,6 +71,19 @@ const Post = require('./models/Post');
 const Incident = require('./models/Incident');
 const Guardian = require('./models/Guardian');
 const Settings = require('./models/Settings');
+const SOSEvent = require('./models/SOSEvent');
+
+const requiredEnvVars = ['JWT_SECRET'];
+for (const key of requiredEnvVars) {
+  if (!process.env[key]) {
+    console.error(`❌ Missing required environment variable: ${key}`);
+    process.exit(1);
+  }
+}
+if (process.env.JWT_SECRET === 'secret') {
+  console.error('❌ JWT_SECRET cannot be the insecure default value "secret".');
+  process.exit(1);
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -153,7 +201,7 @@ const authMiddleware = (req, res, next) => {
     return res.status(401).json({ success: false, message: 'Unauthorized - No token provided' });
   }
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.userId = decoded.id;
     next();
   } catch (err) {
@@ -171,7 +219,27 @@ app.get('/', (req, res) => {
 // ---------- AUTH ROUTES ----------
 
 app.post('/api/auth/signup', authLimiter, async (req, res) => {
-  const { name, email, password, phone } = req.body;
+  const name = normalizeText(req.body?.name, 80);
+  const email = normalizeText(req.body?.email, 254).toLowerCase();
+  const password = String(req.body?.password || '');
+  const phone = normalizePhone(req.body?.phone);
+
+  if (!name || !email || !password || !phone) {
+    return res.status(400).json({ success: false, message: 'All signup fields are required.' });
+  }
+  if (name.length < 2) {
+    return res.status(400).json({ success: false, message: 'Name must be at least 2 characters.' });
+  }
+  if (!EMAIL_REGEX.test(email)) {
+    return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+  }
+  if (!PHONE_REGEX.test(phone)) {
+    return res.status(400).json({ success: false, message: 'Please provide a valid phone number.' });
+  }
+
   try {
     let user = await User.findOne({ email });
     if (user) {
@@ -186,7 +254,7 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
     // Create default settings for new user
     await Settings.create({ userId: user._id });
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ success: true, token, user: { id: user._id, name: user.name, email: user.email, phone: user.phone } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -194,7 +262,16 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
 });
 
 app.post('/api/auth/login', authLimiter, async (req, res) => {
-  const { email, password } = req.body;
+  const email = normalizeText(req.body?.email, 254).toLowerCase();
+  const password = String(req.body?.password || '');
+
+  if (!email || !password) {
+    return res.status(400).json({ success: false, message: 'Email and password are required.' });
+  }
+  if (!EMAIL_REGEX.test(email)) {
+    return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
+  }
+
   try {
     const user = await User.findOne({ email });
     if (!user) {
@@ -206,7 +283,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ success: true, token, user: { id: user._id, name: user.name, email: user.email, phone: user.phone } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -228,7 +305,11 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 // ---------- SOS ROUTES ----------
 
 app.post('/api/sos/activate', authMiddleware, async (req, res) => {
-  const { lat, lon } = req.body;
+  const lat = parseCoordinate(req.body?.lat, -90, 90);
+  const lon = parseCoordinate(req.body?.lon, -180, 180);
+  if (lat === null || lon === null) {
+    return res.status(400).json({ success: false, message: 'Valid latitude and longitude are required.' });
+  }
   console.log(`🚨 SOS Activated by user ${req.userId} at Lat: ${lat}, Lon: ${lon}`);
 
   try {
@@ -242,20 +323,81 @@ app.post('/api/sos/activate', authMiddleware, async (req, res) => {
     
     const twilioConfigured = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN;
 
+    const deliveries = guardians.map((guardian) => ({
+      guardianName: guardian.name || '',
+      guardianPhone: guardian.phone || '',
+      status: !guardian.phone ? 'skipped' : (twilioConfigured ? 'queued' : 'skipped'),
+      error: !guardian.phone
+        ? 'Missing guardian phone'
+        : (twilioConfigured ? '' : 'Twilio not configured'),
+      messageId: '',
+      callId: '',
+    }));
+
+    const auditEvent = await SOSEvent.create({
+      userId: req.userId,
+      status: 'ACTIVATED',
+      lat,
+      lon,
+      guardiansCount: guardians.length,
+      deliveries,
+    });
+
     if (twilioConfigured && guardians.length > 0) {
-      // Fire-and-forget: Send SOS SMS in background (parallel) without blocking the response
-      guardians.forEach(guardian => {
-        if (guardian.phone) {
-          sendSOSSMS(guardian.phone, guardian.name, user.name, lat, lon)
-            .catch(error => console.error(`❌ Background SOS SMS to ${guardian.phone} failed:`, error.message));
+      (async () => {
+        const deliveryUpdates = [];
+        for (const guardian of guardians) {
+          if (!guardian.phone) continue;
+          try {
+            const sendResult = await sendSOSSMS(guardian.phone, guardian.name, user.name, lat, lon);
+            const isSent = Boolean(sendResult?.success);
+            const update = {
+              guardianName: guardian.name || '',
+              guardianPhone: guardian.phone || '',
+              status: isSent ? 'sent' : 'failed',
+              messageId: sendResult?.messageId || '',
+              callId: sendResult?.callId || '',
+              error: sendResult?.error || '',
+            };
+            deliveryUpdates.push(update);
+            io.emit('sos_delivery_update', {
+              sosEventId: String(auditEvent._id),
+              ...update,
+              timestamp: new Date().toISOString(),
+            });
+          } catch (error) {
+            const update = {
+              guardianName: guardian.name || '',
+              guardianPhone: guardian.phone || '',
+              status: 'failed',
+              messageId: '',
+              callId: '',
+              error: error.message || 'Notification send failed',
+            };
+            deliveryUpdates.push(update);
+            io.emit('sos_delivery_update', {
+              sosEventId: String(auditEvent._id),
+              ...update,
+              timestamp: new Date().toISOString(),
+            });
+          }
         }
-      });
-      
-      return res.json({
-        success: true,
-        status: 'ACTIVATED',
-        timestamp: new Date().toISOString(),
-        message: `Emergency SOS activated! Dispatching SMS alerts to ${guardians.length} guardian(s) in background.`
+
+        if (deliveryUpdates.length > 0) {
+          await SOSEvent.updateOne(
+            { _id: auditEvent._id },
+            {
+              $set: {
+                deliveries: deliveries.map((delivery) => {
+                  const resolved = deliveryUpdates.find((d) => d.guardianPhone === delivery.guardianPhone);
+                  return resolved || delivery;
+                }),
+              },
+            }
+          );
+        }
+      })().catch((error) => {
+        console.error('Failed to finalize SOS delivery updates:', error.message);
       });
     }
 
@@ -270,9 +412,16 @@ app.post('/api/sos/activate', authMiddleware, async (req, res) => {
 
     res.json({
       success: true,
+      sosEventId: String(auditEvent._id),
       status: 'ACTIVATED',
       timestamp: new Date().toISOString(),
-      message
+      message,
+      deliverySummary: {
+        totalGuardians: guardians.length,
+        queued: deliveries.filter((d) => d.status === 'queued').length,
+        skipped: deliveries.filter((d) => d.status === 'skipped').length,
+      },
+      deliveries,
     });
   } catch (err) {
     console.error('SOS Error:', err);
@@ -282,6 +431,16 @@ app.post('/api/sos/activate', authMiddleware, async (req, res) => {
 
 app.post('/api/sos/deactivate', authMiddleware, (req, res) => {
   console.log(`✅ SOS Deactivated by user ${req.userId}`);
+  SOSEvent.create({
+    userId: req.userId,
+    status: 'DEACTIVATED',
+    lat: 0,
+    lon: 0,
+    guardiansCount: 0,
+    deliveries: [],
+  }).catch((error) => {
+    console.error('Failed to audit SOS deactivation:', error.message);
+  });
   res.json({ success: true, status: 'DEACTIVATED', timestamp: new Date().toISOString() });
 });
 
@@ -292,6 +451,30 @@ app.post('/api/sos/fake-call', authMiddleware, (req, res) => {
 // ---------- INCIDENT ROUTES ----------
 
 app.post('/api/incidents/report', authMiddleware, upload.single('media'), async (req, res) => {
+  const title = normalizeText(req.body?.title, 120);
+  const description = normalizeText(req.body?.description, 2000);
+  const location = normalizeText(req.body?.location, 180);
+  const type = normalizeText(req.body?.type, 40);
+  const severity = normalizeText(req.body?.severity, 40);
+  const latValue = normalizeText(req.body?.lat, 30);
+  const lonValue = normalizeText(req.body?.lon, 30);
+
+  if (!title || !description || !location) {
+    return res.status(400).json({ success: false, message: 'Title, description, and location are required.' });
+  }
+  if (!ALLOWED_INCIDENT_TYPES.has(type)) {
+    return res.status(400).json({ success: false, message: 'Invalid incident type.' });
+  }
+  if (!ALLOWED_SEVERITY_TYPES.has(severity)) {
+    return res.status(400).json({ success: false, message: 'Invalid incident severity.' });
+  }
+  if (latValue && parseCoordinate(latValue, -90, 90) === null) {
+    return res.status(400).json({ success: false, message: 'Latitude must be between -90 and 90.' });
+  }
+  if (lonValue && parseCoordinate(lonValue, -180, 180) === null) {
+    return res.status(400).json({ success: false, message: 'Longitude must be between -180 and 180.' });
+  }
+
   try {
     let mediaUrl = '';
     if (req.file) {
@@ -299,7 +482,13 @@ app.post('/api/incidents/report', authMiddleware, upload.single('media'), async 
     }
 
     const newIncident = new Incident({
-      ...req.body,
+      title,
+      description,
+      location,
+      type,
+      severity,
+      lat: latValue,
+      lon: lonValue,
       mediaUrl,
       userId: req.userId
     });
@@ -368,7 +557,11 @@ app.get('/api/community/messages', async (req, res) => {
 });
 
 app.post('/api/community/message', authMiddleware, async (req, res) => {
-  const { content, replyTo } = req.body;
+  const content = normalizeText(req.body?.content, 1000);
+  const replyTo = normalizeText(req.body?.replyTo, 64) || null;
+  if (!content) {
+    return res.status(400).json({ success: false, message: 'Message content is required.' });
+  }
   try {
     const user = await User.findById(req.userId);
     const newPost = new Post({
@@ -400,18 +593,36 @@ app.get('/api/guardians', authMiddleware, async (req, res) => {
 
 app.post('/api/guardians', authMiddleware, async (req, res) => {
   try {
-    const { guardians } = req.body; // Array of guardian objects
+    const guardians = Array.isArray(req.body?.guardians) ? req.body.guardians : null; // Array of guardian objects
+    if (!guardians) {
+      return res.status(400).json({ success: false, message: 'Guardians must be an array.' });
+    }
+    if (guardians.length > 5) {
+      return res.status(400).json({ success: false, message: 'Maximum of 5 guardians is allowed.' });
+    }
 
     // Delete existing guardians for this user and replace with new list
     await Guardian.deleteMany({ userId: req.userId });
 
     const guardianDocs = guardians.map(g => ({
       userId: req.userId,
-      name: g.name,
-      relation: g.relation,
-      phone: g.phone,
-      email: g.email || ''
+      name: normalizeText(g?.name, 80),
+      relation: normalizeText(g?.relation, 50),
+      phone: normalizePhone(g?.phone),
+      email: normalizeText(g?.email, 254).toLowerCase() || ''
     }));
+
+    for (const guardian of guardianDocs) {
+      if (!guardian.name || !guardian.relation || !guardian.phone) {
+        return res.status(400).json({ success: false, message: 'Guardian name, relation, and phone are required.' });
+      }
+      if (!PHONE_REGEX.test(guardian.phone)) {
+        return res.status(400).json({ success: false, message: `Invalid guardian phone: ${guardian.phone}` });
+      }
+      if (guardian.email && !EMAIL_REGEX.test(guardian.email)) {
+        return res.status(400).json({ success: false, message: `Invalid guardian email: ${guardian.email}` });
+      }
+    }
 
     const saved = await Guardian.insertMany(guardianDocs);
     res.json({ success: true, guardians: saved });
@@ -436,9 +647,14 @@ app.get('/api/user/settings', authMiddleware, async (req, res) => {
 
 app.post('/api/user/settings', authMiddleware, async (req, res) => {
   try {
+    const notificationsEnabled = req.body?.notificationsEnabled;
+    const locationSharing = req.body?.locationSharing;
+    if (typeof notificationsEnabled !== 'boolean' || typeof locationSharing !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'Settings fields must be boolean values.' });
+    }
     const settings = await Settings.findOneAndUpdate(
       { userId: req.userId },
-      { ...req.body, updatedAt: Date.now() },
+      { notificationsEnabled, locationSharing, updatedAt: Date.now() },
       { new: true, upsert: true }
     );
     res.json(settings);
@@ -451,7 +667,11 @@ app.post('/api/user/settings', authMiddleware, async (req, res) => {
 
 app.post('/api/bot/chat', authMiddleware, async (req, res) => {
   try {
-    const { message, history } = req.body;
+    const message = normalizeText(req.body?.message, 1000);
+    const history = Array.isArray(req.body?.history) ? req.body.history.slice(-30) : [];
+    if (!message) {
+      return res.status(400).json({ success: false, message: 'Message is required.' });
+    }
     
     if (!process.env.GEMINI_API_KEY) {
       return res.status(500).json({ success: false, error: 'GEMINI_API_KEY is not configured in backend.' });
@@ -464,10 +684,10 @@ app.post('/api/bot/chat', authMiddleware, async (req, res) => {
     });
 
     // Format history for Gemini
-    let formattedHistory = history ? history.map(msg => ({
-      role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.text }]
-    })) : [];
+    let formattedHistory = history.map(msg => ({
+      role: msg?.role === 'user' ? 'user' : 'model',
+      parts: [{ text: normalizeText(msg?.text, 1000) }]
+    })).filter((entry) => Boolean(entry.parts[0].text));
 
     // Gemini requires the first message in history to be from 'user'
     while (formattedHistory.length > 0 && formattedHistory[0].role === 'model') {
@@ -491,7 +711,11 @@ app.post('/api/bot/chat', authMiddleware, async (req, res) => {
 // ---------- ROUTES OPTIMIZE (Real data from frontend's routeService) ----------
 
 app.post('/api/routes/optimize', (req, res) => {
-  const { source, destination } = req.body;
+  const source = normalizeText(req.body?.source, 200);
+  const destination = normalizeText(req.body?.destination, 200);
+  if (!source || !destination) {
+    return res.status(400).json({ success: false, message: 'Source and destination are required.' });
+  }
   // The frontend already uses real OpenRouteService + Overpass APIs directly.
   // This endpoint is kept for backward compatibility but the frontend 
   // now handles routing via routeService.js with real APIs.
@@ -500,6 +724,19 @@ app.post('/api/routes/optimize', (req, res) => {
     destination,
     message: 'Route optimization is handled client-side via OpenRouteService API.'
   });
+});
+
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ success: false, message: 'Uploaded file exceeds 10MB limit.' });
+    }
+    return res.status(400).json({ success: false, message: err.message });
+  }
+  if (err && err.message && err.message.includes('Unsupported media type')) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+  return next(err);
 });
 
 // ==========================================
