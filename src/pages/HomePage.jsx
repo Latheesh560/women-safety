@@ -5,25 +5,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ChatbotWidget from '../components/ChatbotWidget';
 import VoiceSOSWidget from '../components/VoiceSOSWidget';
 import {
-  Radio,
-  MapPin,
   ShieldAlert,
   MessageSquare,
   Bell,
   Navigation,
-  Eye,
   Shield,
   Compass,
   LogOut,
   ChevronDown,
   User,
   HeartPulse,
-  Lock,
   Plus,
   ChevronRight,
   ShieldCheck,
   AlertTriangle,
-  Heart,
   Camera,
   FileText,
   Settings

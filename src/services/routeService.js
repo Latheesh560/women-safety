@@ -1,5 +1,4 @@
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
-const ORS_URL = 'https://api.openrouteservice.org/v2/directions/driving-car';
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 
 export const routeService = {

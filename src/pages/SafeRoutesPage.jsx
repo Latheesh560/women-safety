@@ -13,12 +13,10 @@ import {
   ShieldAlert,
   ShieldCheck,
   Eye,
-  Activity,
   Lightbulb,
   Shield,
   Heart,
-  AlertTriangle,
-  ExternalLink
+  AlertTriangle
 } from 'lucide-react';
 
 const sourceIcon = typeof window !== 'undefined' ? L.divIcon({
@@ -670,4 +668,3 @@ const SafeRoutesPage = () => {
 };
 
 export default SafeRoutesPage;
-

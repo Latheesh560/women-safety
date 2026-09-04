@@ -75,7 +75,7 @@ const IncidentReportPage = () => {
         });
         setMediaFile(null);
       }
-    } catch (err) {
+    } catch (_err) {
       setError('An error occurred while logging your report. Please try again.');
     } finally {
       setLoading(false);
@@ -282,4 +282,3 @@ const IncidentReportPage = () => {
 };
 
 export default IncidentReportPage;
-

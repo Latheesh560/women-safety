@@ -73,7 +73,7 @@ export const useAuthStore = create((set, get) => ({
         isAuthenticated: true,
         loading: false,
       });
-    } catch (err) {
+    } catch (_err) {
       // 401 error or other issue, clear token
       localStorage.removeItem('token');
       set({

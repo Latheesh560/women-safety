@@ -54,7 +54,7 @@ const VoiceSOSWidget = () => {
             console.error('Failed to trigger SOS:', err);
           }
         },
-        async (error) => {
+        async (_error) => {
           try {
             const result = await api.post('/sos/activate', { lat: 0, lon: 0 });
             
@@ -127,8 +127,8 @@ const VoiceSOSWidget = () => {
           if (isMountedRef.current && isListeningRef.current) {
             try {
               recognition.start();
-            } catch (e) {
-              console.error('Failed to restart speech recognition after cooldown:', e);
+            } catch (_e) {
+              console.error('Failed to restart speech recognition after cooldown:', _e);
             }
           }
         }, 3000);
@@ -155,7 +155,7 @@ const VoiceSOSWidget = () => {
           if (isMountedRef.current && isListeningRef.current && !isStoppingForSOSRef.current) {
             try {
               recognition.start();
-            } catch (e) {
+            } catch (_e) {
               // Ignore "already started" errors
             }
           }
@@ -177,13 +177,13 @@ const VoiceSOSWidget = () => {
     if (isListening) {
       try {
         recognitionRef.current.start();
-      } catch (e) {
+      } catch (_e) {
         // Ignore "already started" errors
       }
     } else {
       try {
         recognitionRef.current.stop();
-      } catch (e) {}
+      } catch (_e) {}
     }
   }, [isListening]);
 

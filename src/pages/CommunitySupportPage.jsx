@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   AlertCircle,
   MessageSquare,
-  User,
   Clock,
   Hash,
   Loader2,
