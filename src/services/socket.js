@@ -11,8 +11,11 @@ export const getSocket = () => {
     socket = io(SOCKET_URL || undefined, {
       autoConnect: false,
       reconnection: true,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+      transports: ['websocket', 'polling'],
     });
   }
   return socket;

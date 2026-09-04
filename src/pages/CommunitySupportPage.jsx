@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -27,50 +27,86 @@ const CommunitySupportPage = () => {
   const messagesEndRef = useRef(null);
   const socketRef = useRef(null);
 
+  const fetchMessages = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.get('/community/messages');
+      setMessages(data || []);
+    } catch (err) {
+      console.error('Failed to fetch messages.', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Fetch initial messages and set up Socket.IO
   useEffect(() => {
-    const fetchMessages = async () => {
-      setLoading(true);
-      try {
-        const data = await api.get('/community/messages');
-        setMessages(data || []);
-      } catch (err) {
-        console.error('Failed to fetch messages.', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchMessages();
 
     // Connect to Socket.IO for real-time messages
     const socket = connectSocket();
     socketRef.current = socket;
 
-    socket.on('connect', () => {
+    const handleConnect = () => {
       console.log('🔌 Connected to real-time chat');
       setConnected(true);
-    });
+      fetchMessages();
+    };
 
-    socket.on('disconnect', () => {
+    const handleDisconnect = (reason) => {
       console.log('🔌 Disconnected from real-time chat');
       setConnected(false);
-    });
+      if (reason === 'io server disconnect') {
+        socket.connect();
+      }
+    };
+
+    const handleConnectError = (err) => {
+      console.warn('Socket connect error:', err?.message || err);
+      setConnected(false);
+    };
 
     // Listen for new messages from other users
-    socket.on('new_message', (newMessage) => {
+    const handleNewMessage = (newMessage) => {
       setMessages((prev) => {
         // Avoid duplicates (in case we also add it optimistically)
         if (prev.some(m => m._id === newMessage._id)) return prev;
         return [...prev, newMessage];
       });
-    });
+    };
+
+    const ensureConnected = () => {
+      if (!socket.connected) {
+        socket.connect();
+      }
+    };
+
+    const handleOnline = () => ensureConnected();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        ensureConnected();
+      }
+    };
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connect_error', handleConnectError);
+    socket.on('new_message', handleNewMessage);
+    socket.io.on('reconnect', fetchMessages);
+    window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      socket.off('new_message');
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect_error', handleConnectError);
+      socket.off('new_message', handleNewMessage);
+      socket.io.off('reconnect', fetchMessages);
+      window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisibility);
       disconnectSocket();
     };
-  }, []);
+  }, [fetchMessages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

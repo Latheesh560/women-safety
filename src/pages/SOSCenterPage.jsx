@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../services/api';
 import {
   ShieldAlert,
@@ -38,9 +38,28 @@ const SOSCenterPage = () => {
   const fakeCallInterval = useRef(null);
   const subtitleTimeouts = useRef([]);
   const ringtoneInterval = useRef(null);
+  const geoWatchIdRef = useRef(null);
   const audioCtxRef = useRef(null);
   const masterGainRef = useRef(null);
   const activeOscillatorsRef = useRef([]);
+
+  const hasCoordinate = (value) => value !== null && value !== undefined && value !== '';
+
+  const updateGpsCoords = useCallback((lat, lon) => {
+    if (!hasCoordinate(lat) || !hasCoordinate(lon)) return;
+    setGpsCoords({
+      lat: Number(lat).toFixed(6),
+      lon: Number(lon).toFixed(6),
+    });
+  }, []);
+
+  const formatCoordinate = (value, type) => {
+    if (!hasCoordinate(value)) return 'Locating...';
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 'Locating...';
+    const direction = type === 'lat' ? (numeric >= 0 ? 'N' : 'S') : (numeric >= 0 ? 'E' : 'W');
+    return `${Math.abs(numeric).toFixed(6)}° ${direction}`;
+  };
 
   useEffect(() => {
     const handleStatusChanged = (e) => {
@@ -49,8 +68,8 @@ const SOSCenterPage = () => {
       if (active) {
         setSosActive(true);
         setCountdown(0);
-        if (lat && lon) {
-          setGpsCoords({ lat, lon });
+        if (hasCoordinate(lat) && hasCoordinate(lon)) {
+          updateGpsCoords(lat, lon);
         }
         if (message) {
           setSosMessage(message);
@@ -69,49 +88,74 @@ const SOSCenterPage = () => {
       clearInterval(fakeCallInterval.current);
       subtitleTimeouts.current.forEach(clearTimeout);
       clearInterval(ringtoneInterval.current);
+      if (geoWatchIdRef.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(geoWatchIdRef.current);
+      }
       if (audioCtxRef.current) audioCtxRef.current.close();
     };
-  }, []);
+  }, [updateGpsCoords]);
 
-  const handleActivateSOS =async () => {
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        updateGpsCoords(position.coords.latitude, position.coords.longitude);
+      },
+      (err) => {
+        console.warn('Initial GPS fetch failed:', err);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+
+    geoWatchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        updateGpsCoords(position.coords.latitude, position.coords.longitude);
+      },
+      (err) => {
+        console.warn('GPS watch error:', err);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
+    );
+
+    return () => {
+      if (geoWatchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(geoWatchIdRef.current);
+      }
+    };
+  }, [updateGpsCoords]);
+
+  const handleActivateSOS = async () => {
     setSosActive(true);
     setCountdown(0);
     setSosMessage('Activating emergency beacon & locating device...');
 
-    try{   
-       // Perform geolocation lock and backend alert asynchronously in background
-        if (!navigator.geolocation) {
-      throw new Error('Geolocation is not supported by this browser');
-    }
-          const position = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 10000,
-              maximumAge: 0
-            });
-          });
-         let lat = position.coords.latitude;
-        let  lon = position.coords.longitude;
-    setGpsCoords({
-      lat: lat.toFixed(6),
-      lon: lon.toFixed(6)
-    });
-        console.log('SOS Location:', {
-      latitude: lat,
-      longitude: lon
-    });
-   const result = await api.post('/sos/activate', {
-      lat,
-      lon
-    });
-
-    setSosMessage(
-      result.message || 'Emergency SOS activated!'
-    );
-        } catch (gpsErr) {
-          console.warn('GPS timed out or failed, using cached location:', gpsErr);
-        }
+    try {
+      if (!navigator.geolocation) {
+        throw new Error('Geolocation is not supported by this browser');
       }
+
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        });
+      });
+
+      const lat = position.coords.latitude;
+      const lon = position.coords.longitude;
+      updateGpsCoords(lat, lon);
+
+      const result = await api.post('/sos/activate', { lat, lon });
+      setSosMessage(result.message || 'Emergency SOS activated!');
+    } catch (gpsErr) {
+      console.warn('GPS timed out or failed, using fallback coordinates:', gpsErr);
+      const result = await api.post('/sos/activate', { lat: 0, lon: 0 });
+      updateGpsCoords(0, 0);
+      setSosMessage(result.message || 'Emergency SOS activated!');
+    }
+  };
 
   const handleDeactivateSOS = async () => {
     setLoading(true);
@@ -523,13 +567,13 @@ const SOSCenterPage = () => {
                       <div>
                         <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase block">Latitude Grid</span>
                         <span className="text-slate-700 font-mono font-bold flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3.5 h-3.5 text-emerald-500" /> {gpsCoords.lat ? `${gpsCoords.lat}° N` : 'N/A'}
+                          <MapPin className="w-3.5 h-3.5 text-emerald-500" /> {formatCoordinate(gpsCoords.lat, 'lat')}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase block">Longitude Grid</span>
                         <span className="text-slate-700 font-mono font-bold flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3.5 h-3.5 text-emerald-500" /> {gpsCoords.lon ? `${gpsCoords.lon}° E` : 'N/A'}
+                          <MapPin className="w-3.5 h-3.5 text-emerald-500" /> {formatCoordinate(gpsCoords.lon, 'lon')}
                         </span>
                       </div>
                     </div>
@@ -559,11 +603,11 @@ const SOSCenterPage = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="p-3 bg-slate-50/60 rounded-2xl border border-slate-100">
                   <span className="text-[10px] text-slate-400 uppercase font-extrabold block">Current Latitude</span>
-                  <span className="text-xs font-mono font-bold text-slate-700 block mt-1">{gpsCoords.lat ? `${gpsCoords.lat}° N` : 'Locating...'}</span>
+                  <span className="text-xs font-mono font-bold text-slate-700 block mt-1">{formatCoordinate(gpsCoords.lat, 'lat')}</span>
                 </div>
                 <div className="p-3 bg-slate-50/60 rounded-2xl border border-slate-100">
                   <span className="text-[10px] text-slate-400 uppercase font-extrabold block">Current Longitude</span>
-                  <span className="text-xs font-mono font-bold text-slate-700 block mt-1">{gpsCoords.lon ? `${gpsCoords.lon}° E` : 'Locating...'}</span>
+                  <span className="text-xs font-mono font-bold text-slate-700 block mt-1">{formatCoordinate(gpsCoords.lon, 'lon')}</span>
                 </div>
                 <div className="p-3 bg-slate-50/60 rounded-2xl border border-slate-100">
                   <span className="text-[10px] text-slate-400 uppercase font-extrabold block">GPS Precision Limit</span>
