@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
+import { connectSocket } from '../services/socket';
 import {
   ShieldAlert,
   PhoneCall,
@@ -33,6 +34,9 @@ const SOSCenterPage = () => {
   const [callerName, setCallerName] = useState('Mom');
   const [callDelay, setCallDelay] = useState('0');
   const [sosMessage, setSosMessage] = useState('');
+  const [deliverySummary, setDeliverySummary] = useState(null);
+  const [deliveryStatuses, setDeliveryStatuses] = useState([]);
+  const [networkFallbackUsed, setNetworkFallbackUsed] = useState(false);
 
   const countdownInterval = useRef(null);
   const fakeCallInterval = useRef(null);
@@ -41,10 +45,11 @@ const SOSCenterPage = () => {
   const audioCtxRef = useRef(null);
   const masterGainRef = useRef(null);
   const activeOscillatorsRef = useRef([]);
+  const sosEventIdRef = useRef('');
 
   useEffect(() => {
     const handleStatusChanged = (e) => {
-      const { active, lat, lon, message } = e.detail;
+      const { active, lat, lon, message, deliverySummary: incomingSummary, deliveries } = e.detail;
       console.log('Received sos-status-changed event:', e.detail);
       if (active) {
         setSosActive(true);
@@ -55,16 +60,50 @@ const SOSCenterPage = () => {
         if (message) {
           setSosMessage(message);
         }
+        if (incomingSummary) {
+          setDeliverySummary(incomingSummary);
+        }
+        if (Array.isArray(deliveries)) {
+          setDeliveryStatuses(deliveries);
+        }
       } else {
         setSosActive(false);
         setCountdown(0);
+        setDeliverySummary(null);
+        setDeliveryStatuses([]);
+        setNetworkFallbackUsed(false);
       }
     };
 
+    const socket = connectSocket();
+    const handleDeliveryUpdate = (payload) => {
+      if (!payload?.sosEventId || payload.sosEventId !== sosEventIdRef.current) return;
+      setDeliveryStatuses((prev) => {
+        const next = [...prev];
+        const idx = next.findIndex((item) => item.guardianPhone === payload.guardianPhone);
+        const merged = {
+          guardianName: payload.guardianName || '',
+          guardianPhone: payload.guardianPhone || '',
+          status: payload.status || 'failed',
+          error: payload.error || '',
+          messageId: payload.messageId || '',
+          callId: payload.callId || '',
+        };
+        if (idx >= 0) {
+          next[idx] = { ...next[idx], ...merged };
+          return next;
+        }
+        next.push(merged);
+        return next;
+      });
+    };
+
     window.addEventListener('sos-status-changed', handleStatusChanged);
+    socket.on('sos_delivery_update', handleDeliveryUpdate);
 
     return () => {
       window.removeEventListener('sos-status-changed', handleStatusChanged);
+      socket.off('sos_delivery_update', handleDeliveryUpdate);
       clearInterval(countdownInterval.current);
       clearInterval(fakeCallInterval.current);
       subtitleTimeouts.current.forEach(clearTimeout);
@@ -73,45 +112,58 @@ const SOSCenterPage = () => {
     };
   }, []);
 
-  const handleActivateSOS =async () => {
+  const handleActivateSOS = async () => {
     setSosActive(true);
+    setLoading(true);
     setCountdown(0);
     setSosMessage('Activating emergency beacon & locating device...');
+    setDeliverySummary(null);
+    setDeliveryStatuses([]);
+    setNetworkFallbackUsed(false);
 
-    try{   
-       // Perform geolocation lock and backend alert asynchronously in background
-        if (!navigator.geolocation) {
-      throw new Error('Geolocation is not supported by this browser');
-    }
-          const position = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 10000,
-              maximumAge: 0
-            });
+    let lat = 0;
+    let lon = 0;
+    try {
+      if (navigator.geolocation) {
+        const position = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0,
           });
-         let lat = position.coords.latitude;
-        let  lon = position.coords.longitude;
-    setGpsCoords({
-      lat: lat.toFixed(6),
-      lon: lon.toFixed(6)
-    });
-        console.log('SOS Location:', {
-      latitude: lat,
-      longitude: lon
-    });
-   const result = await api.post('/sos/activate', {
-      lat,
-      lon
-    });
-
-    setSosMessage(
-      result.message || 'Emergency SOS activated!'
-    );
-        } catch (gpsErr) {
-          console.warn('GPS timed out or failed, using cached location:', gpsErr);
-        }
+        });
+        lat = position.coords.latitude;
+        lon = position.coords.longitude;
+      } else {
+        setNetworkFallbackUsed(true);
       }
+    } catch (gpsErr) {
+      console.warn('GPS timed out or failed, using fallback coordinates:', gpsErr);
+      setNetworkFallbackUsed(true);
+    }
+
+    try {
+      setGpsCoords({
+        lat: lat.toFixed(6),
+        lon: lon.toFixed(6),
+      });
+      const result = await api.post('/sos/activate', { lat, lon });
+      sosEventIdRef.current = result.sosEventId || '';
+      setSosMessage(result.message || 'Emergency SOS activated!');
+      if (result.deliverySummary) {
+        setDeliverySummary(result.deliverySummary);
+      }
+      if (Array.isArray(result.deliveries)) {
+        setDeliveryStatuses(result.deliveries);
+      }
+    } catch (err) {
+      console.error(err);
+      setSosActive(false);
+      setSosMessage('Failed to activate SOS. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDeactivateSOS = async () => {
     setLoading(true);
@@ -120,6 +172,10 @@ const SOSCenterPage = () => {
       setSosActive(false);
       setCountdown(0);
       clearInterval(countdownInterval.current);
+      setDeliverySummary(null);
+      setDeliveryStatuses([]);
+      setNetworkFallbackUsed(false);
+      sosEventIdRef.current = '';
     } catch (err) {
       console.error(err);
     } finally {
@@ -279,6 +335,13 @@ const SOSCenterPage = () => {
     clearInterval(fakeCallInterval.current);
     setFakeCallTimer(null);
   };
+
+  const deliveryStats = deliveryStatuses.reduce((acc, item) => {
+    const status = item?.status || 'queued';
+    if (!acc[status]) acc[status] = 0;
+    acc[status] += 1;
+    return acc;
+  }, { queued: 0, sent: 0, failed: 0, skipped: 0 });
 
   return (
     <div className="relative min-h-screen bg-gradient-to-tr from-[#F8FAFC] to-[#EEF2FF]">
@@ -537,6 +600,24 @@ const SOSCenterPage = () => {
                   <div className="pt-2 border-t border-slate-100 flex items-center gap-2 text-[10px] font-semibold text-slate-400">
                     <Activity className="w-3.5 h-3.5 text-rose-500 animate-pulse" /> {sosMessage || 'SOS activated. Notifying guardians...'}
                   </div>
+                  {networkFallbackUsed && (
+                    <p className="text-[10px] text-amber-600 font-semibold">
+                      GPS fallback mode: precise location unavailable, emergency signal sent with fallback coordinates.
+                    </p>
+                  )}
+                  {(deliverySummary || deliveryStatuses.length > 0) && (
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Guardian delivery status
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+                        <span className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold">Queued: {deliveryStats.queued}</span>
+                        <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-semibold">Sent: {deliveryStats.sent}</span>
+                        <span className="px-2 py-1 rounded-lg bg-rose-50 text-rose-700 font-semibold">Failed: {deliveryStats.failed}</span>
+                        <span className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700 font-semibold">Skipped: {deliveryStats.skipped}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">

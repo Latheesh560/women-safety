@@ -73,7 +73,7 @@ const Guardian = require('./models/Guardian');
 const Settings = require('./models/Settings');
 const SOSEvent = require('./models/SOSEvent');
 
-const requiredEnvVars = ['JWT_SECRET'];
+const requiredEnvVars = ['JWT_SECRET', 'MONGO_URI'];
 for (const key of requiredEnvVars) {
   if (!process.env[key]) {
     console.error(`❌ Missing required environment variable: ${key}`);
@@ -135,7 +135,7 @@ const authLimiter = rateLimit({
 });
 
 // MongoDB Connection
-const mongoURI = process.env.MONGO_URI || 'mongodb://localhost:27017/women-safety';
+const mongoURI = process.env.MONGO_URI;
 mongoose.connect(mongoURI)
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.log('❌ MongoDB connection error:', err));
