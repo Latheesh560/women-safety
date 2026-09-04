@@ -134,6 +134,12 @@ const authLimiter = rateLimit({
   message: { success: false, message: 'Too many attempts, please try again after 15 minutes.' }
 });
 
+const protectedLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 120,
+  message: { success: false, message: 'Too many requests. Please slow down and try again.' },
+});
+
 // MongoDB Connection
 const mongoURI = process.env.MONGO_URI;
 mongoose.connect(mongoURI)
@@ -290,7 +296,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   }
 });
 
-app.get('/api/auth/me', authMiddleware, async (req, res) => {
+app.get('/api/auth/me', protectedLimiter, authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.userId).select('-password');
     if (!user) {
@@ -304,7 +310,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 
 // ---------- SOS ROUTES ----------
 
-app.post('/api/sos/activate', authMiddleware, async (req, res) => {
+app.post('/api/sos/activate', protectedLimiter, authMiddleware, async (req, res) => {
   const lat = parseCoordinate(req.body?.lat, -90, 90);
   const lon = parseCoordinate(req.body?.lon, -180, 180);
   if (lat === null || lon === null) {
@@ -429,7 +435,7 @@ app.post('/api/sos/activate', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/api/sos/deactivate', authMiddleware, (req, res) => {
+app.post('/api/sos/deactivate', protectedLimiter, authMiddleware, (req, res) => {
   console.log(`✅ SOS Deactivated by user ${req.userId}`);
   SOSEvent.create({
     userId: req.userId,
@@ -444,13 +450,13 @@ app.post('/api/sos/deactivate', authMiddleware, (req, res) => {
   res.json({ success: true, status: 'DEACTIVATED', timestamp: new Date().toISOString() });
 });
 
-app.post('/api/sos/fake-call', authMiddleware, (req, res) => {
+app.post('/api/sos/fake-call', protectedLimiter, authMiddleware, (req, res) => {
   res.json({ success: true, delaySeconds: 30, incomingCaller: 'Mom' });
 });
 
 // ---------- INCIDENT ROUTES ----------
 
-app.post('/api/incidents/report', authMiddleware, upload.single('media'), async (req, res) => {
+app.post('/api/incidents/report', protectedLimiter, authMiddleware, upload.single('media'), async (req, res) => {
   const title = normalizeText(req.body?.title, 120);
   const description = normalizeText(req.body?.description, 2000);
   const location = normalizeText(req.body?.location, 180);
@@ -518,7 +524,7 @@ app.post('/api/incidents/report', authMiddleware, upload.single('media'), async 
   }
 });
 
-app.get('/api/incidents/my-reports', authMiddleware, async (req, res) => {
+app.get('/api/incidents/my-reports', protectedLimiter, authMiddleware, async (req, res) => {
   try {
     const incidents = await Incident.find({ userId: req.userId }).sort({ createdAt: -1 });
     res.json(incidents);
@@ -527,7 +533,7 @@ app.get('/api/incidents/my-reports', authMiddleware, async (req, res) => {
   }
 });
 
-app.get('/api/incidents/all', authMiddleware, async (req, res) => {
+app.get('/api/incidents/all', protectedLimiter, authMiddleware, async (req, res) => {
   try {
     // Fetch recent incidents (last 30 days) that have valid coordinates
     const thirtyDaysAgo = new Date();
@@ -556,7 +562,7 @@ app.get('/api/community/messages', async (req, res) => {
   }
 });
 
-app.post('/api/community/message', authMiddleware, async (req, res) => {
+app.post('/api/community/message', protectedLimiter, authMiddleware, async (req, res) => {
   const content = normalizeText(req.body?.content, 1000);
   const replyTo = normalizeText(req.body?.replyTo, 64) || null;
   if (!content) {
@@ -582,7 +588,7 @@ app.post('/api/community/message', authMiddleware, async (req, res) => {
 
 // ---------- GUARDIAN ROUTES ----------
 
-app.get('/api/guardians', authMiddleware, async (req, res) => {
+app.get('/api/guardians', protectedLimiter, authMiddleware, async (req, res) => {
   try {
     const guardians = await Guardian.find({ userId: req.userId }).sort({ createdAt: 1 });
     res.json({ success: true, guardians });
@@ -591,7 +597,7 @@ app.get('/api/guardians', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/api/guardians', authMiddleware, async (req, res) => {
+app.post('/api/guardians', protectedLimiter, authMiddleware, async (req, res) => {
   try {
     const guardians = Array.isArray(req.body?.guardians) ? req.body.guardians : null; // Array of guardian objects
     if (!guardians) {
@@ -633,7 +639,7 @@ app.post('/api/guardians', authMiddleware, async (req, res) => {
 
 // ---------- USER SETTINGS ROUTES ----------
 
-app.get('/api/user/settings', authMiddleware, async (req, res) => {
+app.get('/api/user/settings', protectedLimiter, authMiddleware, async (req, res) => {
   try {
     let settings = await Settings.findOne({ userId: req.userId });
     if (!settings) {
@@ -645,7 +651,7 @@ app.get('/api/user/settings', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/api/user/settings', authMiddleware, async (req, res) => {
+app.post('/api/user/settings', protectedLimiter, authMiddleware, async (req, res) => {
   try {
     const notificationsEnabled = req.body?.notificationsEnabled;
     const locationSharing = req.body?.locationSharing;
@@ -665,7 +671,7 @@ app.post('/api/user/settings', authMiddleware, async (req, res) => {
 
 // ---------- AI BOT ROUTES ----------
 
-app.post('/api/bot/chat', authMiddleware, async (req, res) => {
+app.post('/api/bot/chat', protectedLimiter, authMiddleware, async (req, res) => {
   try {
     const message = normalizeText(req.body?.message, 1000);
     const history = Array.isArray(req.body?.history) ? req.body.history.slice(-30) : [];

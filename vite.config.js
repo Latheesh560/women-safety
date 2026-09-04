@@ -7,11 +7,21 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-ui': ['framer-motion', 'lucide-react'],
-          'vendor-maps': ['leaflet', 'react-leaflet'],
-          'vendor-realtime': ['socket.io-client'],
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('react-router-dom') || id.includes('/react/') || id.includes('/react-dom/')) {
+            return 'vendor-react';
+          }
+          if (id.includes('leaflet') || id.includes('react-leaflet')) {
+            return 'vendor-maps';
+          }
+          if (id.includes('framer-motion') || id.includes('lucide-react')) {
+            return 'vendor-ui';
+          }
+          if (id.includes('socket.io-client')) {
+            return 'vendor-realtime';
+          }
+          return 'vendor-misc';
         },
       },
     },
