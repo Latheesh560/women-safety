@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../context/authStore';
+import { api } from '../services/api';
 import { User, Mail, Phone, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -10,6 +11,10 @@ const SignupPage = () => {
   const [localError, setLocalError] = useState('');
   const navigate = useNavigate();
   const { signup, loading, error, clearError, isAuthenticated } = useAuthStore();
+
+  useEffect(() => {
+    api.warmup();
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) navigate('/home');

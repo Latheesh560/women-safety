@@ -49,7 +49,6 @@ const SOSCenterPage = () => {
   useEffect(() => {
     const handleStatusChanged = (e) => {
       const { active, lat, lon, message } = e.detail;
-      console.log('Received sos-status-changed event:', e.detail);
       if (active) {
         setSosActive(true);
         setCountdown(0);
@@ -317,12 +316,12 @@ const SOSCenterPage = () => {
 
   return (
     <div className="relative min-h-screen bg-gradient-to-tr from-[#F8FAFC] to-[#EEF2FF]">
-      
+
       {/* Smartphone Fake Call Simulation Screen (iOS/Android High-Fidelity Style) */}
       {incomingCallActive && (
         <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
           <div className="w-full max-w-sm bg-gradient-to-b from-[#111827] to-[#030712] rounded-[48px] border-8 border-slate-800 shadow-[0_0_80px_rgba(0,0,0,0.8)] aspect-[9/19.5] max-h-[850px] flex flex-col justify-between p-8 text-center relative overflow-hidden">
-            
+
             {/* Top Speaker/Camera Bar */}
             <div className="absolute top-3 left-1/2 -translate-x-1/2 w-28 h-6 bg-slate-900 rounded-full flex items-center justify-center">
               <div className="w-12 h-1 bg-slate-800 rounded-full mr-2" />
@@ -399,7 +398,7 @@ const SOSCenterPage = () => {
 
       {/* Main Layout Container */}
       <div className="p-4 md:p-6 space-y-6">
-        
+
         {/* Urgent Premium Header Area */}
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
@@ -413,7 +412,7 @@ const SOSCenterPage = () => {
               Initiate rapid tactical response protocols, notify personal safety guardians, or run mock safety escape calls instantly.
             </p>
           </div>
-          
+
           <div className="flex items-center gap-2.5 px-4 py-2 bg-emerald-50 border border-emerald-100 text-emerald-700 font-bold text-xs rounded-2xl self-start md:self-auto shadow-sm">
             <ShieldCheck className="w-4 h-4 text-emerald-500 animate-pulse" />
             256-Bit Tactical Encryption Active
@@ -482,8 +481,8 @@ const SOSCenterPage = () => {
               System Notification <span className="flex h-2 w-2 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span></span>
             </h3>
             <p className="text-xs text-amber-800 font-medium leading-relaxed max-w-4xl">
-              We are currently operating on a free trial tier. At this time, SOS SMS emergency alerts are restricted to <strong>pre-registered Guardian phone numbers only</strong>. 
-              Upon upgrading, this feature will seamlessly dispatch alerts to any emergency contact globally. 
+              We are currently operating on a free trial tier. At this time, SOS SMS emergency alerts are restricted to <strong>pre-registered Guardian phone numbers only</strong>.
+              Upon upgrading, this feature will seamlessly dispatch alerts to any emergency contact globally.
               <span className="block mt-2 font-bold text-amber-900 bg-amber-100/50 inline-block px-3 py-1.5 rounded-lg border border-amber-200/50">
                 ✨ If you would like a live demonstration of the full unlimited capabilities, please contact me!
               </span>
@@ -493,14 +492,14 @@ const SOSCenterPage = () => {
 
         {/* Central Dashboard Layout */}
         <div className="grid lg:grid-cols-12 gap-6 items-start">
-          
+
           {/* Central SOS Activation Console Area (Left Panel) */}
           <div className="lg:col-span-7 space-y-6">
-            
+
             {/* SOS Trigger Panel */}
             <section className="bg-white rounded-3xl border border-slate-100 shadow-[0_12px_40px_rgba(0,0,0,0.02)] p-6 md:p-8 flex flex-col justify-between items-center text-center min-h-[460px] relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-rose-500 via-[#EC4899] to-red-500" />
-              
+
               <div>
                 <span className="px-3.5 py-1.5 bg-rose-50 border border-rose-100 rounded-2xl text-[10px] font-extrabold text-rose-600 tracking-widest uppercase inline-block mb-3 animate-pulse">
                   {sosActive ? 'CRITICAL PROTOCOL ACTIVE' : 'RESPONDER TELEMETRY READY'}
@@ -619,11 +618,11 @@ const SOSCenterPage = () => {
 
           {/* Interactive Fake Call & Helplines (Right Panel) */}
           <div className="lg:col-span-5 space-y-6">
-            
+
             {/* Redesigned Fake Call Card */}
             <section className="bg-white rounded-3xl border border-slate-100 shadow-[0_12px_40px_rgba(0,0,0,0.02)] p-5 md:p-6 flex flex-col justify-between min-h-[360px] relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary to-accent" />
-              
+
               <div>
                 <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-2 mb-2">
                   <Bell className="w-4 h-4 text-primary animate-pulse" /> Safety Deterrent Fake Call
@@ -702,9 +701,9 @@ const SOSCenterPage = () => {
               <h3 className="text-sm font-extrabold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-50 pb-3">
                 <PhoneCall className="w-4 h-4 text-rose-500 animate-pulse" /> Emergency Helpline Network
               </h3>
-              
+
               <div className="space-y-3.5">
-                
+
                 {/* Police Hub */}
                 <div className="flex items-center justify-between p-3.5 bg-blue-50/50 border border-blue-100/50 rounded-2xl hover:border-blue-300 transition-all group">
                   <div className="flex items-center gap-3">

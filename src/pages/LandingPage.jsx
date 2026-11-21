@@ -1,8 +1,13 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { api } from '../services/api';
 import { Shield, Navigation, ShieldAlert, Users, ArrowRight, PhoneCall, Lock, CheckCircle } from 'lucide-react';
 
 const LandingPage = () => {
+  useEffect(() => {
+    api.warmup();
+  }, []);
   const features = [
     {
       icon: Navigation,

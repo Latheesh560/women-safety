@@ -13,8 +13,8 @@ from fastapi import Request, HTTPException
 
 logger = logging.getLogger("sheshield.auth")
 
-# Password hashing context — bcrypt with 12 rounds (passlib default, compatible with Node bcryptjs)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing context — bcrypt with 10 rounds (fast & secure on shared CPU, compatible with Node bcryptjs)
+pwd_context = CryptContext(schemes=["bcrypt"], bcrypt__rounds=10, deprecated="auto")
 
 
 def _resolve_jwt_secret() -> str:

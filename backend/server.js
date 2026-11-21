@@ -151,7 +151,11 @@ app.use('/api', apiLimiter);
 // MongoDB Connection
 const mongoURI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/women-safety';
 mongoose
-  .connect(mongoURI)
+  .connect(mongoURI, {
+    serverSelectionTimeoutMS: 8000,
+    socketTimeoutMS: 20000,
+    maxPoolSize: 10
+  })
   .then(() => console.log('✅ MongoDB connected'))
   .catch((err) => console.error('❌ MongoDB connection error:', err.message));
 
@@ -236,6 +240,10 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'SheShield Women Safety API is running 🛡️' });
 });
 
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: Date.now() });
+});
+
 // ---------- AUTH ROUTES ----------
 // TODO(security): Consider adding OAuth2/MFA and leaked password detection for enhanced account protection.
 
@@ -287,7 +295,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   }
 
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('_id name email phone password').lean();
     if (!user) {
       return res.status(400).json({ success: false, message: 'Invalid email or password' });
     }

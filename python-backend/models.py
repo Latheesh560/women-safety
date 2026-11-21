@@ -41,8 +41,12 @@ def doc_to_dict(doc: dict) -> dict:
 # ──────────────────────────────────────────────
 
 async def find_user_by_email(db: AsyncIOMotorDatabase, email: str) -> Optional[dict]:
-    """Find a user by email. Returns full document including password."""
-    user = await db.users.find_one({"email": email})
+    """Find a user by email (normalized). Returns projected document including password."""
+    normalized = email.strip().lower()
+    projection = {"_id": 1, "name": 1, "email": 1, "phone": 1, "password": 1}
+    user = await db.users.find_one({"email": normalized}, projection)
+    if not user and email != normalized:
+        user = await db.users.find_one({"email": email.strip()}, projection)
     return doc_to_dict(user) if user else None
 
 

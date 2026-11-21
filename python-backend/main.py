@@ -122,7 +122,12 @@ async def lifespan(app: FastAPI):
     global mongo_client, db
     logger.info("🛡️  SheShield Python Backend starting...")
 
-    mongo_client = AsyncIOMotorClient(MONGO_URI)
+    mongo_client = AsyncIOMotorClient(
+        MONGO_URI,
+        serverSelectionTimeoutMS=8000,
+        connectTimeoutMS=8000,
+        maxPoolSize=10,
+    )
     try:
         db = mongo_client.get_default_database()
     except Exception:
@@ -214,16 +219,21 @@ async def root():
     return {"status": "ok", "message": "SheShield Women Safety API is running 🛡️"}
 
 
+@app.get("/api/health")
+async def health():
+    return {"status": "ok"}
+
+
 # ────────── AUTH ROUTES ──────────
 
 @app.post("/api/auth/signup")
 @limiter.limit("20/15minutes")
 async def signup(request: Request):
     body = await request.json()
-    name = body.get("name", "")
-    email = body.get("email", "")
-    password = body.get("password", "")
-    phone = body.get("phone", "")
+    name = str(body.get("name", "")).strip()
+    email = str(body.get("email", "")).strip().lower()
+    password = str(body.get("password", ""))
+    phone = str(body.get("phone", "")).strip()
 
     try:
         existing = await find_user_by_email(db, email)
@@ -233,7 +243,7 @@ async def signup(request: Request):
                 content={"success": False, "message": "An account with this email already exists."},
             )
 
-        hashed = hash_password(password)
+        hashed = await asyncio.to_thread(hash_password, password)
         user = await create_user(db, name, email, hashed, phone)
 
         # Create default settings for new user
@@ -253,8 +263,8 @@ async def signup(request: Request):
 @limiter.limit("20/15minutes")
 async def login(request: Request):
     body = await request.json()
-    email = body.get("email", "")
-    password = body.get("password", "")
+    email = str(body.get("email", "")).strip().lower()
+    password = str(body.get("password", ""))
 
     try:
         user = await find_user_by_email(db, email)
@@ -264,7 +274,8 @@ async def login(request: Request):
                 content={"success": False, "message": "Invalid email or password"},
             )
 
-        if not verify_password(password, user["password"]):
+        is_valid = await asyncio.to_thread(verify_password, password, user["password"])
+        if not is_valid:
             return JSONResponse(
                 status_code=400,
                 content={"success": False, "message": "Invalid email or password"},
