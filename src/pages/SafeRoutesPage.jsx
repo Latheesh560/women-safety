@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { routeService } from '../services/routeService';
 import { api } from '../services/api';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, Circle } from 'react-leaflet';
@@ -13,12 +14,10 @@ import {
   ShieldAlert,
   ShieldCheck,
   Eye,
-  Activity,
   Lightbulb,
   Shield,
   Heart,
-  AlertTriangle,
-  ExternalLink
+  AlertTriangle
 } from 'lucide-react';
 
 const sourceIcon = typeof window !== 'undefined' ? L.divIcon({
@@ -60,11 +59,13 @@ function MapController({ bounds }) {
 }
 
 const SafeRoutesPage = () => {
+  const routerLocation = useLocation();
   const [source, setSource] = useState('');
   const [destination, setDestination] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [locating, setLocating] = useState(false);
+  const [activeFilterBanner, setActiveFilterBanner] = useState('');
 
   const [sourceSuggestions, setSourceSuggestions] = useState([]);
   const [destSuggestions, setDestSuggestions] = useState([]);
@@ -125,11 +126,49 @@ const SafeRoutesPage = () => {
     );
   };
 
+  // Load reported danger zones on mount and handle quick-filter from HomePage hotspots
+  useEffect(() => {
+    let active = true;
+    api.get('/incidents/all')
+      .then((incidents) => {
+        if (active && Array.isArray(incidents)) {
+          setDangerZones(incidents);
+        }
+      })
+      .catch(() => {});
+
+    const filterType = routerLocation.state?.filter;
+    if (filterType && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          if (!active) return;
+          const { latitude, longitude } = pos.coords;
+          setSourceCoords([latitude, longitude]);
+          setMapBounds([[latitude, longitude]]);
+          setSource(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+          if (filterType === 'police') {
+            setActiveFilterBanner('Showing Nearby Police Precincts within 5km of your GPS position');
+            const police = await routeService.getNearbyAmenities(latitude, longitude, 'police', 5000);
+            if (active) setPoliceStations(police);
+          } else if (filterType === 'medical') {
+            setActiveFilterBanner('Showing Nearby Hospitals & Medical Facilities within 5km of your GPS position');
+            const medical = await routeService.getNearbyAmenities(latitude, longitude, 'hospital', 5000);
+            if (active) setHospitals(medical);
+          }
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [routerLocation.state]);
+
   // Debounced search for Source Point Suggestions
   useEffect(() => {
     if (source.trim().length < 3) {
-      setSourceSuggestions([]);
-      setShowSourceSuggestions(false);
       return;
     }
 
@@ -159,8 +198,6 @@ const SafeRoutesPage = () => {
   // Debounced search for Destination Point Suggestions
   useEffect(() => {
     if (destination.trim().length < 3) {
-      setDestSuggestions([]);
-      setShowDestSuggestions(false);
       return;
     }
 
@@ -262,7 +299,7 @@ const SafeRoutesPage = () => {
       setPoliceStations(police);
       setHospitals(medical);
 
-      const analysis = routeService.calculateSafetyScore(routeFeature, police, medical);
+      const analysis = routeService.calculateSafetyScore(routeFeature, police, medical, incidents);
       setSafetyAnalysis(analysis);
 
     } catch (err) {
@@ -286,8 +323,14 @@ const SafeRoutesPage = () => {
           <Compass className="w-7 h-7 text-primary-dark" /> Intelligence Safe Routing
         </h1>
         <p className="text-sm text-slate-600 mt-0.5">
-          Real-time navigation optimized for women's safety using live geospatial data.
+          Real-time navigation optimized for women&apos;s safety using live geospatial data.
         </p>
+        {activeFilterBanner && (
+          <div className="mt-3 px-3.5 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-700 inline-flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>{activeFilterBanner}</span>
+          </div>
+        )}
       </header>
 
       <div className="grid lg:grid-cols-12 gap-6 items-start">
@@ -336,7 +379,14 @@ const SafeRoutesPage = () => {
                   type="text"
                   required
                   value={source}
-                  onChange={(e) => setSource(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSource(val);
+                    if (val.trim().length < 3) {
+                      setSourceSuggestions([]);
+                      setShowSourceSuggestions(false);
+                    }
+                  }}
                   placeholder="Enter city or address"
                   className="input-field bg-white/80 border-slate-200/80 focus:border-primary/60 text-slate-800"
                 />
@@ -366,7 +416,14 @@ const SafeRoutesPage = () => {
                   type="text"
                   required
                   value={destination}
-                  onChange={(e) => setDestination(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setDestination(val);
+                    if (val.trim().length < 3) {
+                      setDestSuggestions([]);
+                      setShowDestSuggestions(false);
+                    }
+                  }}
                   placeholder="Enter city or address"
                   className="input-field bg-white/80 border-slate-200/80 focus:border-primary/60 text-slate-800"
                 />
@@ -453,6 +510,9 @@ const SafeRoutesPage = () => {
             <MapContainer
               center={[20.5937, 78.9629]}
               zoom={5}
+              minZoom={5}
+              maxBounds={[ [6.5, 68.1], [35.7, 97.4] ]}
+              maxBoundsViscosity={1.0}
               style={{ height: '100%', width: '100%', borderRadius: '0.85rem' }}
               className="z-10"
             >

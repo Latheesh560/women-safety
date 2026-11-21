@@ -1,51 +1,60 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import {
   FileText,
   MapPin,
   Calendar,
-  AlertTriangle,
   Plus,
-  Loader2,
   Filter,
-  RefreshCw
+  RefreshCw,
+  ExternalLink
 } from 'lucide-react';
+
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5005/api').replace(/\/api$/, '');
 
 const MyReportsPage = () => {
   const [reports, setReports] = useState([]);
-  const [filteredReports, setFilteredReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('All');
   const [filterSeverity, setFilterSeverity] = useState('All');
   const navigate = useNavigate();
 
-  const fetchReports = async () => {
+  const fetchReports = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.get('/incidents/my-reports');
-      setReports(data || []);
-      setFilteredReports(data || []);
+      setReports(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load user reports.', err);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchReports();
   }, []);
 
   useEffect(() => {
-    let result = [...reports];
-    if (filterType !== 'All') {
-      result = result.filter(r => r.type === filterType);
-    }
-    if (filterSeverity !== 'All') {
-      result = result.filter(r => r.severity === filterSeverity);
-    }
-    setFilteredReports(result);
+    let active = true;
+    api.get('/incidents/my-reports')
+      .then((data) => {
+        if (active) setReports(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        console.error('Failed to load user reports.', err);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const filteredReports = useMemo(() => {
+    return reports.filter((r) => {
+      const matchesType = filterType === 'All' || r.type === filterType;
+      const matchesSeverity = filterSeverity === 'All' || r.severity === filterSeverity;
+      return matchesType && matchesSeverity;
+    });
   }, [filterType, filterSeverity, reports]);
 
   const getSeverityBadgeClass = (severity) => {
@@ -67,8 +76,9 @@ const MyReportsPage = () => {
   };
 
   const formatDate = (isoStr) => {
-    if (!isoStr) return '';
+    if (!isoStr) return 'Recently reported';
     const date = new Date(isoStr);
+    if (isNaN(date.getTime())) return 'Recently reported';
     return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -76,6 +86,12 @@ const MyReportsPage = () => {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const resolveMediaUrl = (mediaUrl) => {
+    if (!mediaUrl) return '';
+    if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) return mediaUrl;
+    return `${API_BASE}${mediaUrl}`;
   };
 
   return (
@@ -165,48 +181,67 @@ const MyReportsPage = () => {
           </div>
         ) : filteredReports.length > 0 ? (
           <div className="space-y-4 animate-in fade-in duration-300">
-            {filteredReports.map((report) => (
-              <div
-                key={report.id}
-                className="bg-white/70 backdrop-blur-md border border-white/60 hover:border-pink-200/50 shadow-[0_8px_32px_rgba(255,182,193,0.06)] hover:shadow-[0_12px_36px_rgba(255,182,193,0.14)] p-5 transition-all duration-300 flex flex-col md:flex-row justify-between md:items-start gap-4 relative overflow-hidden rounded-[20px]"
-              >
-                <div className="space-y-3 flex-1">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h3 className="text-base font-bold text-slate-800 hover:text-primary-dark transition-colors">
-                      {report.title}
-                    </h3>
-                    <span className={`px-2 py-0.5 border text-[10px] font-extrabold uppercase rounded-md tracking-wider shrink-0 ${getSeverityBadgeClass(report.severity)}`}>
-                      {report.severity}
-                    </span>
-                    <span className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] text-slate-500 font-bold uppercase">
-                      {report.type}
-                    </span>
+            {filteredReports.map((report) => {
+              const reportId = report._id || report.id;
+              const reportDate = report.createdAt || report.created_at;
+              const fullMediaUrl = resolveMediaUrl(report.mediaUrl);
+
+              return (
+                <div
+                  key={reportId}
+                  className="bg-white/70 backdrop-blur-md border border-white/60 hover:border-pink-200/50 shadow-[0_8px_32px_rgba(255,182,193,0.06)] hover:shadow-[0_12px_36px_rgba(255,182,193,0.14)] p-5 transition-all duration-300 flex flex-col md:flex-row justify-between md:items-start gap-4 relative overflow-hidden rounded-[20px]"
+                >
+                  <div className="space-y-3 flex-1">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h3 className="text-base font-bold text-slate-800 hover:text-primary-dark transition-colors">
+                        {report.title}
+                      </h3>
+                      <span className={`px-2 py-0.5 border text-[10px] font-extrabold uppercase rounded-md tracking-wider shrink-0 ${getSeverityBadgeClass(report.severity)}`}>
+                        {report.severity}
+                      </span>
+                      <span className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] text-slate-500 font-bold uppercase">
+                        {report.type}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500 font-semibold">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-primary-dark shrink-0" /> {report.location}
+                      </span>
+                      <span className="flex items-center gap-1 border-l border-pink-100/40 pl-4">
+                        <Calendar className="w-3.5 h-3.5 text-primary-dark shrink-0" /> {formatDate(reportDate)}
+                      </span>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-slate-700 leading-relaxed max-w-4xl pt-1">
+                      {report.description}
+                    </p>
+
+                    {fullMediaUrl && (
+                      <div className="pt-2">
+                        <a
+                          href={fullMediaUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-primary-dark hover:text-accent bg-pink-50/70 border border-pink-100 px-3 py-1.5 rounded-xl transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" /> View Attached Media Evidence
+                        </a>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500 font-semibold">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5 text-primary-dark shrink-0" /> {report.location}
-                    </span>
-                    <span className="flex items-center gap-1 border-l border-pink-100/40 pl-4">
-                      <Calendar className="w-3.5 h-3.5 text-primary-dark shrink-0" /> {formatDate(report.created_at)}
-                    </span>
+                  <div className="flex flex-row md:flex-col justify-between items-center md:items-end shrink-0 gap-3 border-t md:border-t-0 border-pink-50/20 pt-3 md:pt-0">
+                    <div className={`px-3 py-1 text-xs font-bold rounded-lg ${getStatusBadgeClass(report.status)}`}>
+                      {report.status}
+                    </div>
+                    <div className="text-[10px] text-slate-500 md:text-right text-left">
+                      REF: <span className="font-mono text-slate-800 font-bold bg-slate-50 border border-slate-200/60 px-1.5 py-0.5 rounded select-all">{String(reportId).slice(-8).toUpperCase()}</span>
+                    </div>
                   </div>
-
-                  <p className="text-xs sm:text-sm text-slate-700 leading-relaxed max-w-4xl pt-1">
-                    {report.description}
-                  </p>
                 </div>
-
-                <div className="flex flex-row md:flex-col justify-between items-center md:items-end shrink-0 gap-3 border-t md:border-t-0 border-pink-50/20 pt-3 md:pt-0">
-                  <div className={`px-3 py-1 text-xs font-bold rounded-lg ${getStatusBadgeClass(report.status)}`}>
-                    {report.status}
-                  </div>
-                  <div className="text-[10px] text-slate-500 md:text-right text-left">
-                    REF: <span className="font-mono text-slate-800 font-bold bg-slate-50 border border-slate-200/60 px-1.5 py-0.5 rounded select-all">{report.id}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="bg-white/50 backdrop-blur-md border border-dashed border-pink-200/60 shadow-sm p-12 flex flex-col items-center justify-center text-center py-20 rounded-[20px] hover:border-primary/40 transition-all duration-300">
@@ -215,7 +250,7 @@ const MyReportsPage = () => {
             </div>
             <h3 className="text-lg font-bold text-slate-800">No Incident Logs Recorded</h3>
             <p className="text-slate-600 text-xs sm:text-sm max-w-sm mt-2 leading-relaxed mb-5">
-              You haven't reported any safety hazards or incidents yet. Log reports to help keep other women safe!
+              You haven&apos;t reported any safety hazards or incidents yet. Log reports to help keep other women safe!
             </p>
             <button
               onClick={() => navigate('/incident-report')}

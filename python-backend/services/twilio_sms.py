@@ -5,6 +5,7 @@ Equivalent to the sendSOSSMS function in server.js
 import os
 import asyncio
 import logging
+from xml.sax.saxutils import escape as xml_escape
 
 logger = logging.getLogger("sheshield.twilio")
 
@@ -39,10 +40,12 @@ async def send_sos_call(to_phone: str, to_name: str, user_name: str, lat: str, l
     elif not formatted_to_phone.startswith("+"):
         formatted_to_phone = f"+{formatted_to_phone}"
 
+    safe_user_name = xml_escape(str(user_name or ""))
+    safe_to_name = xml_escape(str(to_name or ""))
     twiml = (
         f"<Response><Say voice='alice'>"
-        f"Emergency SOS Alert. {user_name} has triggered an S O S and needs immediate help. "
-        f"Dear {to_name}, please check on them immediately. Their live location is available on the app."
+        f"Emergency SOS Alert. {safe_user_name} has triggered an S O S and needs immediate help. "
+        f"Dear {safe_to_name}, please check on them immediately. Their live location is available on the app."
         f"</Say></Response>"
     )
 

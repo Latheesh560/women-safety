@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../context/authStore';
-import { Shield, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const LoginPage = () => {
@@ -89,7 +89,6 @@ const LoginPage = () => {
           <div>
             <div className="flex justify-between items-center mb-1.5">
               <label className="input-label mb-0">Password</label>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Demo: password123</span>
             </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">

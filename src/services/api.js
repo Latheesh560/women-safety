@@ -48,9 +48,9 @@ const request = async (endpoint, options = {}) => {
 // Expose API client methods
 export const api = {
   get: (endpoint, options = {}) => request(endpoint, { ...options, method: 'GET' }),
-  post: (endpoint, body, options = {}) => request(endpoint, { 
-    ...options, 
-    method: 'POST', 
-    body: body instanceof FormData ? body : JSON.stringify(body) 
+  post: (endpoint, body, options = {}) => request(endpoint, {
+    ...options,
+    method: 'POST',
+    body: body instanceof FormData ? body : JSON.stringify(body)
   }),
 };

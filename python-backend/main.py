@@ -32,7 +32,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from auth import hash_password, verify_password, create_token, get_current_user
 from models import (
     ensure_indexes,
-    find_user_by_email, find_user_by_id, create_user,
+    find_user_by_email, find_user_by_id, create_user, update_user_profile,
     get_settings, create_default_settings, upsert_settings,
     get_guardians, replace_guardians,
     create_incident, get_user_incidents, get_recent_incidents,
@@ -184,6 +184,9 @@ async def log_requests(request: Request, call_next):
     origin = request.headers.get("origin", "none")
     logger.info(f"🛡️ [REQ] {request.method} {request.url.path} | Origin: {origin}")
     response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     return response
 
 
@@ -287,8 +290,30 @@ async def get_me(user_id: str = Depends(get_current_user)):
                 content={"success": False, "message": "User not found"},
             )
         return {"user": {"id": user["_id"], "name": user["name"], "email": user["email"], "phone": user["phone"]}}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+    except Exception:
+        return JSONResponse(status_code=500, content={"success": False, "message": "Failed to load user profile."})
+
+
+@app.post("/api/user/profile")
+async def update_profile(request: Request, user_id: str = Depends(get_current_user)):
+    body = await request.json()
+    name = str(body.get("name", "")).strip()
+    phone = str(body.get("phone", "")).strip()
+    if not name or not phone:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "Name and phone number are required."},
+        )
+    try:
+        user = await update_user_profile(db, user_id, name, phone)
+        if not user:
+            return JSONResponse(status_code=404, content={"success": False, "message": "User not found"})
+        return {
+            "success": True,
+            "user": {"id": user["_id"], "name": user["name"], "email": user["email"], "phone": user["phone"]},
+        }
+    except Exception:
+        return JSONResponse(status_code=500, content={"success": False, "message": "Failed to update profile."})
 
 
 # ────────── SOS ROUTES ──────────
@@ -369,6 +394,11 @@ async def sos_fake_call(user_id: str = Depends(get_current_user)):
 
 # ────────── INCIDENT ROUTES ──────────
 
+ALLOWED_UPLOAD_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".webm"}
+ALLOWED_UPLOAD_MIMES = {"image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"}
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
 @app.post("/api/incidents/report")
 async def report_incident(
     request: Request,
@@ -386,12 +416,22 @@ async def report_incident(
     try:
         media_url = ""
         if media and media.filename:
-            # Generate unique filename — same pattern as multer in server.js
-            unique_suffix = f"{int(datetime.now().timestamp() * 1000)}-{uuid.uuid4().hex[:9]}"
-            ext = Path(media.filename).suffix
+            safe_name = os.path.basename(media.filename)
+            ext = Path(safe_name).suffix.lower()
+            if ext not in ALLOWED_UPLOAD_EXTENSIONS or (media.content_type and media.content_type not in ALLOWED_UPLOAD_MIMES):
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "message": "Invalid file type. Only JPG, PNG, WEBP, MP4, and WEBM files are allowed."},
+                )
+            content = await media.read()
+            if len(content) > MAX_UPLOAD_BYTES:
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "message": "File size exceeds 10MB limit."},
+                )
+            unique_suffix = f"{int(datetime.now().timestamp() * 1000)}-{uuid.uuid4().hex}"
             filename = f"{unique_suffix}{ext}"
             filepath = UPLOAD_DIR / filename
-            content = await media.read()
             with open(filepath, "wb") as f:
                 f.write(content)
             media_url = f"/uploads/incidents/{filename}"
@@ -561,11 +601,12 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.getenv("PORT", 5005))
-    logger.info(f"🛡️  SheShield Backend running on port {port}")
+    host = os.getenv("HOST", "127.0.0.1")
+    logger.info(f"🛡️  SheShield Backend running on http://{host}:{port}")
     logger.info("📡 Socket.IO ready for real-time connections")
     uvicorn.run(
         combined_app,
-        host="0.0.0.0",
+        host=host,
         port=port,
         log_level="info",
     )

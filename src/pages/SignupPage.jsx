@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../context/authStore';
-import { Shield, User, Mail, Phone, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { User, Mail, Phone, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const SignupPage = () => {

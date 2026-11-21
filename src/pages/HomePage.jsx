@@ -5,25 +5,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ChatbotWidget from '../components/ChatbotWidget';
 import VoiceSOSWidget from '../components/VoiceSOSWidget';
 import {
-  Radio,
-  MapPin,
   ShieldAlert,
   MessageSquare,
   Bell,
   Navigation,
-  Eye,
   Shield,
   Compass,
   LogOut,
   ChevronDown,
   User,
   HeartPulse,
-  Lock,
   Plus,
   ChevronRight,
   ShieldCheck,
   AlertTriangle,
-  Heart,
   Camera,
   FileText,
   Settings
@@ -495,6 +490,14 @@ const HomePage = () => {
             })}
           </div>
 
+          {/* INVISIBLE DOUBLE-CLICK SOS TRIGGER OVER ENTIRE SHIELD */}
+          <div
+            className="absolute z-10 pointer-events-auto cursor-pointer"
+            style={{ left: '35%', top: '10%', width: '45%', height: '80%' }}
+            title="Double click to activate SOS instantly"
+            onDoubleClick={() => navigate('/sos-center', { state: { autoActivate: true } })}
+          />
+
           {/* DYNAMIC SHIELD CORE ACTIVATION HALO (Pulsing around padlock inside shield) */}
           <div
             className="absolute z-20 -translate-x-1/2 -translate-y-1/2 pointer-events-auto group/padlock cursor-pointer"
@@ -579,6 +582,8 @@ const HomePage = () => {
           <motion.div
             style={{ left: '83%', top: '73%' }}
             whileHover={{ scale: 1.1, rotate: 90 }}
+            onClick={() => navigate('/incident-report')}
+            title="Report Safety Incident"
             className="absolute z-20 w-8 h-8 rounded-full bg-pink-500/10 border border-pink-200 text-pink-600 flex items-center justify-center shadow-sm cursor-pointer hover:bg-pink-500 hover:text-white transition-all duration-300 pointer-events-auto"
           >
             <Plus className="w-4 h-4" />

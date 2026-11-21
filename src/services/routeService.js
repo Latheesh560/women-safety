@@ -1,13 +1,8 @@
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
-const ORS_URL = 'https://api.openrouteservice.org/v2/directions/driving-car';
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 
 export const routeService = {
-  /**
-   * Geocode a place name to coordinates using Nominatim
-   */
   async getCoordinates(place) {
-    // Check if the place is already coordinates (e.g. "lat, lon" or "lat,lon")
     const coordRegex = /^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)$/;
     const match = place.trim().match(coordRegex);
     if (match) {
@@ -34,17 +29,14 @@ export const routeService = {
     throw new Error('Location not found');
   },
 
-  /**
-   * Get foot-walking route from OpenRouteService avoiding danger zones
-   */
   async getRoute(start, end, incidents = []) {
     const apiKey = import.meta.env.VITE_OPENROUTESERVICE_KEY;
     if (!apiKey) {
       throw new Error('OpenRouteService API key not found in .env. Please add VITE_OPENROUTESERVICE_KEY.');
     }
-    
-    // Create danger zones (polygons) around incidents (approx 100x100m bounding box)
-    const polygons = incidents.map(inc => {
+
+    const validIncidents = incidents.filter(inc => !isNaN(parseFloat(inc.lat)) && !isNaN(parseFloat(inc.lon)));
+    const polygons = validIncidents.map(inc => {
       const d = 0.001; // ~111 meters
       const lat = parseFloat(inc.lat);
       const lon = parseFloat(inc.lon);
@@ -64,8 +56,8 @@ export const routeService = {
     if (polygons.length > 0) {
       body.options = {
         avoid_polygons: {
-          type: "MultiPolygon",
-          coordinates: [polygons] // MultiPolygon requires [[[lon, lat]]] format
+          type: 'MultiPolygon',
+          coordinates: [polygons]
         }
       };
     }
@@ -78,12 +70,12 @@ export const routeService = {
       },
       body: JSON.stringify(body)
     });
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error?.message || 'Failed to fetch safe route');
     }
-    
+
     const data = await response.json();
     if (data.features && data.features.length > 0) {
       return data.features[0];
@@ -91,10 +83,6 @@ export const routeService = {
     throw new Error('Route not found');
   },
 
-  /**
-   * Fetch nearby amenities using Overpass API (OpenStreetMap)
-   * This makes the safety data REAL and dynamic.
-   */
   async getNearbyAmenities(lat, lon, type, radius = 5000, retries = 1) {
     const query = `[out:json];node["amenity"="${type}"](around:${radius},${lat},${lon});out;`;
     try {
@@ -104,8 +92,6 @@ export const routeService = {
       return data.elements || [];
     } catch (error) {
       if (retries > 0) {
-        console.warn(`Retrying Overpass API for ${type}... (${retries} left)`);
-        // Wait 1 second before retrying
         await new Promise(res => setTimeout(res, 1000));
         return this.getNearbyAmenities(lat, lon, type, radius, retries - 1);
       }
@@ -114,34 +100,48 @@ export const routeService = {
     }
   },
 
-  /**
-   * Calculate a dynamic safety score based on route conditions and nearby safety infrastructure
-   */
-  calculateSafetyScore(routeFeature, policeStations, hospitals) {
-    let score = 75; // Base score
-    
-    // 1. Reward for nearby police stations
+  calculateSafetyScore(routeFeature, policeStations, hospitals, incidents = []) {
+    let score = 75;
+
     if (policeStations.length > 0) {
-      score += Math.min(policeStations.length * 5, 15); // Max +15
+      score += Math.min(policeStations.length * 5, 15);
     }
-    
-    // 2. Reward for nearby hospitals
+
     if (hospitals.length > 0) {
-      score += Math.min(hospitals.length * 2, 10); // Max +10
+      score += Math.min(hospitals.length * 2, 10);
     }
-    
-    // 3. Analyze route distance/duration
-    const distance = routeFeature.properties.summary.distance / 1000; // km
+
+    const distance = routeFeature.properties.summary.distance / 1000;
     if (distance > 20) {
-      score -= 10; // Longer routes are generally riskier at night
+      score -= 10;
     }
-    
-    // Cap score between 0 and 100
+
+    if (Array.isArray(incidents) && incidents.length > 0 && routeFeature.geometry?.coordinates?.length > 0) {
+      const coords = routeFeature.geometry.coordinates;
+      const mid = coords[Math.floor(coords.length / 2)];
+      const midLat = mid[1];
+      const midLon = mid[0];
+
+      let incidentPenalty = 0;
+      incidents.forEach((inc) => {
+        const iLat = parseFloat(inc.lat);
+        const iLon = parseFloat(inc.lon);
+        if (!isNaN(iLat) && !isNaN(iLon)) {
+          const approxDistKm = Math.hypot(iLat - midLat, iLon - midLon) * 111;
+          if (approxDistKm <= 5) {
+            const weight = inc.severity === 'Critical' ? 8 : inc.severity === 'High' ? 5 : inc.severity === 'Medium' ? 3 : 1;
+            incidentPenalty += weight;
+          }
+        }
+      });
+      score -= Math.min(incidentPenalty, 30);
+    }
+
     score = Math.max(0, Math.min(score, 100));
-    
+
     let riskLevel = 'Moderate Risk';
     let corridorStatus = 'Standard Corridor';
-    
+
     if (score >= 85) {
       riskLevel = 'Highly Safe';
       corridorStatus = 'Secure Corridor';
@@ -149,7 +149,7 @@ export const routeService = {
       riskLevel = 'Unsafe Route';
       corridorStatus = 'Caution Required';
     }
-    
+
     return {
       score,
       riskLevel,

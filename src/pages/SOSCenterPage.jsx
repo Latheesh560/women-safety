@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import {
   ShieldAlert,
@@ -18,11 +19,12 @@ import {
   Wifi,
   Navigation,
   Sparkles,
-  ArrowRight,
   Shield
 } from 'lucide-react';
 
 const SOSCenterPage = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [sosActive, setSosActive] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [fakeCallTimer, setFakeCallTimer] = useState(null);
@@ -34,6 +36,7 @@ const SOSCenterPage = () => {
   const [callerName, setCallerName] = useState('Mom');
   const [callDelay, setCallDelay] = useState('0');
   const [sosMessage, setSosMessage] = useState('');
+  const [guardianCount, setGuardianCount] = useState(null);
 
   const countdownInterval = useRef(null);
   const fakeCallInterval = useRef(null);
@@ -74,46 +77,76 @@ const SOSCenterPage = () => {
     };
   }, []);
 
-  const handleActivateSOS =async () => {
+  useEffect(() => {
+    api.get('/guardians')
+      .then((data) => {
+        if (data?.success && Array.isArray(data.guardians)) {
+          setGuardianCount(data.guardians.length);
+        } else {
+          setGuardianCount(0);
+        }
+      })
+      .catch(() => setGuardianCount(0));
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setGpsCoords({
+            lat: pos.coords.latitude.toFixed(4),
+            lon: pos.coords.longitude.toFixed(4)
+          });
+        },
+        (err) => console.warn('Initial GPS location failed:', err),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
+  }, []);
+
+  const handleActivateSOS = useCallback(() => {
     setSosActive(true);
     setCountdown(0);
     setSosMessage('Activating emergency beacon & locating device...');
 
-    try{   
-       // Perform geolocation lock and backend alert asynchronously in background
-        if (!navigator.geolocation) {
-      throw new Error('Geolocation is not supported by this browser');
-    }
-          const position = await new Promise((resolve, reject) => {
+    (async () => {
+      let lat = gpsCoords.lat;
+      let lon = gpsCoords.lon;
+
+      if (navigator.geolocation) {
+        try {
+          const pos = await new Promise((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
               enableHighAccuracy: true,
-              timeout: 10000,
-              maximumAge: 0
+              timeout: 5000,
+              maximumAge: 10000
             });
           });
-         let lat = position.coords.latitude;
-        let  lon = position.coords.longitude;
-    setGpsCoords({
-      lat: lat.toFixed(6),
-      lon: lon.toFixed(6)
-    });
-        console.log('SOS Location:', {
-      latitude: lat,
-      longitude: lon
-    });
-   const result = await api.post('/sos/activate', {
-      lat,
-      lon
-    });
-
-    setSosMessage(
-      result.message || 'Emergency SOS activated!'
-    );
+          lat = pos.coords.latitude.toFixed(6);
+          lon = pos.coords.longitude.toFixed(6);
+          setGpsCoords({ lat, lon });
         } catch (gpsErr) {
           console.warn('GPS timed out or failed, using cached location:', gpsErr);
         }
       }
 
+      try {
+        const result = await api.post('/sos/activate', { lat, lon });
+        setSosMessage(result.message || 'Emergency SOS activated!');
+      } catch (err) {
+        console.error(err);
+        setSosMessage('SOS signal dispatched locally. Offline mode active.');
+      }
+    })();
+  }, [gpsCoords.lat, gpsCoords.lon]);
+
+  useEffect(() => {
+    if (location.state?.autoActivate && !sosActive) {
+      window.history.replaceState({}, document.title);
+      const timer = setTimeout(() => {
+        handleActivateSOS();
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [location.state, sosActive, handleActivateSOS]);
   const handleDeactivateSOS = async () => {
     setLoading(true);
     try {
@@ -186,7 +219,7 @@ const SOSCenterPage = () => {
     clearInterval(ringtoneInterval.current);
     if (activeOscillatorsRef.current) {
       activeOscillatorsRef.current.forEach(osc => {
-        try { osc.stop(); } catch (e) {}
+        try { osc.stop(); } catch { /* ignore */ }
       });
       activeOscillatorsRef.current = [];
     }
@@ -194,7 +227,7 @@ const SOSCenterPage = () => {
       try {
         masterGainRef.current.gain.setValueAtTime(0, audioCtxRef.current.currentTime);
         masterGainRef.current.disconnect();
-      } catch (e) {}
+      } catch { /* ignore */ }
     }
     if (audioCtxRef.current) audioCtxRef.current.close();
   };
@@ -238,20 +271,21 @@ const SOSCenterPage = () => {
   };
 
   const runSubtitles = () => {
+    const activeCaller = callerName.trim() || 'Mom';
     const dialogs = [
-      { text: "Mom: Hey honey! Where are you? I've been waiting for you.", delay: 1000 },
-      { text: "Mom: I'm just standing outside the block entrance with your brother.", delay: 5000 },
-      { text: "Mom: Yes, we are waiting for you right here. See you in 2 minutes!", delay: 9000 },
-      { text: "Mom: Stay on the line until you arrive. We are watching the gate.", delay: 13000 }
+      { text: `${activeCaller}: Hey! Where are you? I've been waiting for you.`, delay: 1000 },
+      { text: `${activeCaller}: I'm just standing outside the block entrance right now.`, delay: 5000 },
+      { text: `${activeCaller}: Yes, we are waiting for you right here. See you in 2 minutes!`, delay: 9000 },
+      { text: `${activeCaller}: Stay on the line until you arrive. We are watching the gate.`, delay: 13000 }
     ];
-    // Clear any existing subtitle timeouts
     subtitleTimeouts.current.forEach(clearTimeout);
     subtitleTimeouts.current = [];
 
     dialogs.forEach((dialog) => {
       const timeoutId = setTimeout(() => {
         setSimulatedSubtitles(dialog.text);
-        const utterance = new SpeechSynthesisUtterance(dialog.text.replace("Mom: ", ""));
+        const spokenText = dialog.text.replace(`${activeCaller}: `, '');
+        const utterance = new SpeechSynthesisUtterance(spokenText);
         utterance.rate = 0.9;
         utterance.pitch = 1.1;
         window.speechSynthesis.speak(utterance);
@@ -411,13 +445,19 @@ const SOSCenterPage = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex items-center gap-3.5 hover:shadow-md transition-all">
+          <div
+            onClick={() => navigate('/settings')}
+            className="bg-white rounded-2xl border border-slate-100 p-4 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex items-center gap-3.5 hover:shadow-md transition-all cursor-pointer"
+            title="Manage Guardians in Settings"
+          >
             <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center shrink-0">
               <Activity className="w-4 h-4 text-rose-500 animate-pulse" />
             </div>
             <div>
               <span className="text-[10px] text-slate-400 uppercase font-extrabold tracking-wider block">Guardian Nodes</span>
-              <strong className="text-xs text-slate-800 block">2 ONLINE / STEADY</strong>
+              <strong className={`text-xs block ${guardianCount === 0 ? 'text-amber-600' : 'text-slate-800'}`}>
+                {guardianCount === null ? 'CHECKING...' : guardianCount > 0 ? `${guardianCount} CONFIGURED / READY` : '0 SET (TAP TO ADD)'}
+              </strong>
             </div>
           </div>
 

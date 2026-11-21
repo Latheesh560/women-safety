@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
-import { connectSocket, disconnectSocket } from '../services/socket';
+import { connectSocket, getSocket } from '../services/socket';
+import { useAuthStore } from '../context/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
@@ -8,7 +9,6 @@ import {
   ShieldCheck,
   AlertCircle,
   MessageSquare,
-  User,
   Clock,
   Hash,
   Loader2,
@@ -19,22 +19,21 @@ import {
 } from 'lucide-react';
 
 const CommunitySupportPage = () => {
+  const { user } = useAuthStore();
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [connected, setConnected] = useState(false);
+  const [connected, setConnected] = useState(() => getSocket().connected);
   const messagesEndRef = useRef(null);
-  const socketRef = useRef(null);
 
-  // Fetch initial messages and set up Socket.IO
   useEffect(() => {
     const fetchMessages = async () => {
       setLoading(true);
       try {
         const data = await api.get('/community/messages');
-        setMessages(data || []);
+        setMessages(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error('Failed to fetch messages.', err);
       } finally {
@@ -44,32 +43,25 @@ const CommunitySupportPage = () => {
 
     fetchMessages();
 
-    // Connect to Socket.IO for real-time messages
     const socket = connectSocket();
-    socketRef.current = socket;
 
-    socket.on('connect', () => {
-      console.log('🔌 Connected to real-time chat');
-      setConnected(true);
-    });
-
-    socket.on('disconnect', () => {
-      console.log('🔌 Disconnected from real-time chat');
-      setConnected(false);
-    });
-
-    // Listen for new messages from other users
-    socket.on('new_message', (newMessage) => {
+    const handleConnect = () => setConnected(true);
+    const handleDisconnect = () => setConnected(false);
+    const handleNewMessage = (newMessage) => {
       setMessages((prev) => {
-        // Avoid duplicates (in case we also add it optimistically)
-        if (prev.some(m => m._id === newMessage._id)) return prev;
+        if (prev.some((m) => (m._id || m.id) === (newMessage._id || newMessage.id))) return prev;
         return [...prev, newMessage];
       });
-    });
+    };
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('new_message', handleNewMessage);
 
     return () => {
-      socket.off('new_message');
-      disconnectSocket();
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('new_message', handleNewMessage);
     };
   }, []);
 
@@ -94,7 +86,6 @@ const CommunitySupportPage = () => {
           content: replyingTo.content
         };
       }
-      // Post to API — server will broadcast via Socket.IO to all clients
       await api.post('/community/message', payload);
       setInputText('');
       setReplyingTo(null);
@@ -113,7 +104,8 @@ const CommunitySupportPage = () => {
   const formatTime = (isoStr) => {
     if (!isoStr) return '';
     const d = new Date(isoStr);
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -138,8 +130,8 @@ const CommunitySupportPage = () => {
               </div>
             </div>
             <div className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${
-              connected 
-                ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-700' 
+              connected
+                ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-700'
                 : 'bg-amber-500/10 border border-amber-500/20 text-amber-700'
             }`}>
               {connected ? (
@@ -162,48 +154,62 @@ const CommunitySupportPage = () => {
                 <span className="text-xs text-slate-500 font-bold">Loading messages...</span>
               </div>
             ) : messages.length > 0 ? (
-              messages.map((msg) => (
-                <motion.div 
-                  key={msg._id || msg.id}
-                  drag="x"
-                  dragConstraints={{ left: 0, right: 0 }}
-                  dragElastic={0.15}
-                  onDragEnd={(e, info) => {
-                    if (info.offset.x > 50) {
-                      setReplyingTo(msg);
-                    }
-                  }}
-                  className="relative group touch-pan-y"
-                >
-                  <div className="absolute left-[-35px] top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
-                    <button onClick={() => setReplyingTo(msg)} className="p-1.5 bg-pink-100 text-pink-600 rounded-full hover:bg-pink-200">
-                      <Reply className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <div className="flex gap-3.5 items-start p-3 bg-white/70 hover:bg-white/95 border border-pink-100/30 hover:border-pink-200/50 rounded-2xl transition-colors duration-200 shadow-[0_2px_12px_rgba(255,182,193,0.02)]">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-dark to-[#FFB6C1] flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-sm shadow-primary-dark/30">
-                      {getInitials(msg.username)}
+              messages.map((msg) => {
+                const isOwnMessage = user?.name && msg.username === user.name;
+                return (
+                  <motion.div
+                    key={msg._id || msg.id}
+                    drag="x"
+                    dragConstraints={{ left: 0, right: 0 }}
+                    dragElastic={0.15}
+                    onDragEnd={(e, info) => {
+                      if (info.offset.x > 50) {
+                        setReplyingTo(msg);
+                      }
+                    }}
+                    className="relative group touch-pan-y"
+                  >
+                    <div className="absolute left-[-35px] top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
+                      <button onClick={() => setReplyingTo(msg)} className="p-1.5 bg-pink-100 text-pink-600 rounded-full hover:bg-pink-200">
+                        <Reply className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                    <div className="space-y-1 flex-1 min-w-0">
-                      <div className="flex items-baseline justify-between gap-2.5">
-                        <strong className="text-sm text-slate-800 font-bold">{msg.username}</strong>
-                        <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 shrink-0">
-                          <Clock className="w-3 h-3 text-primary-dark" /> {formatTime(msg.timestamp)}
-                        </span>
+                    <div className={`flex gap-3.5 items-start p-3 border rounded-2xl transition-colors duration-200 shadow-[0_2px_12px_rgba(255,182,193,0.02)] ${
+                      isOwnMessage
+                        ? 'bg-pink-50/60 hover:bg-pink-50/90 border-pink-200/60'
+                        : 'bg-white/70 hover:bg-white/95 border-pink-100/30 hover:border-pink-200/50'
+                    }`}>
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-dark to-[#FFB6C1] flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-sm shadow-primary-dark/30">
+                        {getInitials(msg.username)}
                       </div>
-                      {msg.replyTo && (
-                        <div className="mt-1 mb-2 p-2 bg-pink-50/50 border-l-2 border-pink-300 rounded-r-lg text-xs">
-                          <div className="font-bold text-pink-700 mb-0.5">{msg.replyTo.username}</div>
-                          <div className="text-slate-600 truncate">{msg.replyTo.content}</div>
+                      <div className="space-y-1 flex-1 min-w-0">
+                        <div className="flex items-baseline justify-between gap-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <strong className="text-sm text-slate-800 font-bold">{msg.username}</strong>
+                            {isOwnMessage && (
+                              <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-primary/20 text-accent-dark">
+                                You
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 shrink-0">
+                            <Clock className="w-3 h-3 text-primary-dark" /> {formatTime(msg.timestamp)}
+                          </span>
                         </div>
-                      )}
-                      <p className="text-xs sm:text-sm text-slate-750 leading-relaxed break-words font-medium">
-                        {msg.content}
-                      </p>
+                        {msg.replyTo && (
+                          <div className="mt-1 mb-2 p-2 bg-pink-50/50 border-l-2 border-pink-300 rounded-r-lg text-xs">
+                            <div className="font-bold text-pink-700 mb-0.5">{msg.replyTo.username}</div>
+                            <div className="text-slate-600 truncate">{msg.replyTo.content}</div>
+                          </div>
+                        )}
+                        <p className="text-xs sm:text-sm text-slate-750 leading-relaxed break-words font-medium">
+                          {msg.content}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))
+                  </motion.div>
+                );
+              })
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center text-slate-500">
                 <MessageSquare className="w-10 h-10 text-slate-400 mb-3" />
@@ -217,7 +223,7 @@ const CommunitySupportPage = () => {
           <div className="p-4 bg-white/60 border-t border-pink-100/30 backdrop-blur-md flex flex-col gap-2">
             <AnimatePresence>
               {replyingTo && (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, y: 10, height: 0 }}
                   animate={{ opacity: 1, y: 0, height: 'auto' }}
                   exit={{ opacity: 0, y: 10, height: 0 }}

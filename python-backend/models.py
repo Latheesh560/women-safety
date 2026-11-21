@@ -73,6 +73,19 @@ async def create_user(db: AsyncIOMotorDatabase, name: str, email: str, hashed_pa
     return doc_to_dict(user_doc)
 
 
+async def update_user_profile(db: AsyncIOMotorDatabase, user_id: str, name: str, phone: str) -> Optional[dict]:
+    """Update a user's name and phone number."""
+    result = await db.users.find_one_and_update(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"name": name, "phone": phone}},
+        return_document=True,
+    )
+    if not result:
+        return None
+    result.pop("password", None)
+    return doc_to_dict(result)
+
+
 # ──────────────────────────────────────────────
 # SETTINGS OPERATIONS
 # ──────────────────────────────────────────────
@@ -100,15 +113,17 @@ async def create_default_settings(db: AsyncIOMotorDatabase, user_id: str) -> dic
 
 async def upsert_settings(db: AsyncIOMotorDatabase, user_id: str, settings_data: dict) -> dict:
     """Update user settings (upsert). Matches Settings.findOneAndUpdate in server.js."""
-    # Remove fields that shouldn't be overwritten
-    update_data = {k: v for k, v in settings_data.items() if k not in ("_id", "userId")}
-    update_data["updatedAt"] = datetime.now(timezone.utc)
+    update_data = {
+        "notificationsEnabled": bool(settings_data.get("notificationsEnabled", True)),
+        "locationSharing": bool(settings_data.get("locationSharing", True)),
+        "updatedAt": datetime.now(timezone.utc),
+    }
 
     result = await db.settings.find_one_and_update(
         {"userId": ObjectId(user_id)},
         {"$set": update_data},
         upsert=True,
-        return_document=True,  # Return the updated document
+        return_document=True,
     )
     return doc_to_dict(result)
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
 
+// TODO(security): Migrate JWT storage from localStorage to HttpOnly SameSite cookies when backend cookie auth is enabled.
 export const useAuthStore = create((set, get) => ({
   user: null,
   token: localStorage.getItem('token') || null,
@@ -8,7 +9,6 @@ export const useAuthStore = create((set, get) => ({
   loading: false,
   error: null,
 
-  // Login action
   login: async (email, password) => {
     set({ loading: true, error: null });
     try {
@@ -27,7 +27,6 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Signup action
   signup: async (userData) => {
     set({ loading: true, error: null });
     try {
@@ -46,7 +45,15 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Logout action
+  updateProfile: async (profileData) => {
+    set({ error: null });
+    const data = await api.post('/user/profile', profileData);
+    if (data && data.user) {
+      set({ user: data.user });
+    }
+    return data.user;
+  },
+
   logout: () => {
     localStorage.removeItem('token');
     set({
@@ -57,14 +64,13 @@ export const useAuthStore = create((set, get) => ({
     });
   },
 
-  // Fetch current user (restores session)
   fetchUser: async () => {
     const token = get().token;
     if (!token) {
       set({ isAuthenticated: false, loading: false });
       return;
     }
-    
+
     set({ loading: true, error: null });
     try {
       const data = await api.get('/auth/me');
@@ -73,8 +79,7 @@ export const useAuthStore = create((set, get) => ({
         isAuthenticated: true,
         loading: false,
       });
-    } catch (err) {
-      // 401 error or other issue, clear token
+    } catch {
       localStorage.removeItem('token');
       set({
         user: null,
@@ -86,6 +91,5 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Helper to clear errors
   clearError: () => set({ error: null }),
 }));

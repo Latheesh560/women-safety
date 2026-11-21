@@ -1,30 +1,28 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Mic, MicOff, AlertTriangle } from 'lucide-react';
 import { api } from '../services/api';
+import { motion } from 'framer-motion';
 
 const WAKE_WORDS = [
-  // Single Keywords
   'help', 'sos', 'emergency', 'save me', 'danger', 'rescue', 'protect me', 'safe shield', 'sheshield', 'alert', 'unsafe', 'danger alert', 'panic', 'assist',
-  // Short Sentences
   'help me', 'i need help', 'please help me', 'emergency help', "i'm in danger", 'im in danger', 'i am in danger', 'send help', 'call police', 'activate sos', 'start emergency mode', 'sheshield help', 'sheshield activate', 'safe mode on', 'i am unsafe', 'im unsafe', 'someone is following me', 'i need immediate help',
-  // Secret / Discreet Phrases
   "i'm not feeling safe", 'im not feeling safe', 'i am not feeling safe', 'please check my location', 'red alert', 'code red', 'safety mode', 'contact emergency', 'notify my family', 'start tracking', 'send my location',
-  // Telugu Keywords
   'kapadandi', 'nannu kapadandi', 'sahayam kavali', 'pramadam', 'rakshinchandi', 'police ki call cheyyi', 'nenu danger lo unnanu', 'naku help kavali', 'sos activate cheyyi'
 ];
 
 const VoiceSOSWidget = () => {
-  const [isListening, setIsListening] = useState(true);
+  const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState(null);
-  const [supported, setSupported] = useState(true);
+  const [supported] = useState(() =>
+    typeof window !== 'undefined' && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
+  );
   const [lastHeard, setLastHeard] = useState('');
-  
+
   const recognitionRef = useRef(null);
   const isListeningRef = useRef(isListening);
   const isMountedRef = useRef(true);
   const isStoppingForSOSRef = useRef(false);
 
-  // Keep track of component mount state
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -32,7 +30,6 @@ const VoiceSOSWidget = () => {
     };
   }, []);
 
-  // Keep ref in sync to avoid stale closures inside recognition events
   useEffect(() => {
     isListeningRef.current = isListening;
   }, [isListening]);
@@ -45,8 +42,7 @@ const VoiceSOSWidget = () => {
             const lat = position.coords.latitude.toFixed(4);
             const lon = position.coords.longitude.toFixed(4);
             const result = await api.post('/sos/activate', { lat, lon });
-            
-            // Dispatch event to sync UI components (e.g. SOSCenterPage)
+
             window.dispatchEvent(new CustomEvent('sos-status-changed', {
               detail: { active: true, lat, lon, message: result.message || 'SOS ACTIVATED VIA VOICE COMMAND' }
             }));
@@ -54,10 +50,10 @@ const VoiceSOSWidget = () => {
             console.error('Failed to trigger SOS:', err);
           }
         },
-        async (error) => {
+        async () => {
           try {
             const result = await api.post('/sos/activate', { lat: 0, lon: 0 });
-            
+
             window.dispatchEvent(new CustomEvent('sos-status-changed', {
               detail: { active: true, lat: '0', lon: '0', message: result.message || 'SOS ACTIVATED VIA VOICE COMMAND (Location unavailable)' }
             }));
@@ -69,34 +65,30 @@ const VoiceSOSWidget = () => {
       );
     } else {
       api.post('/sos/activate', { lat: 0, lon: 0 })
-         .then((result) => {
-            window.dispatchEvent(new CustomEvent('sos-status-changed', {
-              detail: { active: true, lat: '0', lon: '0', message: result.message || 'SOS ACTIVATED VIA VOICE COMMAND' }
-            }));
-         })
-         .catch(err => console.error('Failed to trigger SOS:', err));
+        .then((result) => {
+          window.dispatchEvent(new CustomEvent('sos-status-changed', {
+            detail: { active: true, lat: '0', lon: '0', message: result.message || 'SOS ACTIVATED VIA VOICE COMMAND' }
+          }));
+        })
+        .catch(err => console.error('Failed to trigger SOS:', err));
     }
   }, []);
 
-  // Initialize SpeechRecognition exactly once
   useEffect(() => {
+    if (!supported) return;
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
-      setSupported(false);
-      return;
-    }
+    if (!SpeechRecognition) return;
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
-    recognition.interimResults = true; 
+    recognition.interimResults = true;
     recognition.lang = 'en-US';
 
     recognition.onresult = (event) => {
       let finalTranscript = '';
       let interimTranscript = '';
 
-      // Loop from 0 to capture wake words split across event index boundaries
       for (let i = 0; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
           finalTranscript += event.results[i][0].transcript;
@@ -104,24 +96,22 @@ const VoiceSOSWidget = () => {
           interimTranscript += event.results[i][0].transcript;
         }
       }
-      
+
       const transcript = (finalTranscript + interimTranscript).toLowerCase();
       const cleanTranscript = transcript.replace(/[.,!?]/g, '').trim();
-      
+
       if (cleanTranscript) {
         setLastHeard(cleanTranscript);
       }
-      
+
       const wakeWordDetected = WAKE_WORDS.some(word => cleanTranscript.includes(word));
-      
+
       if (wakeWordDetected) {
-        console.log('🗣️ Wake word detected!', cleanTranscript);
         triggerSOS();
-        
-        // Use a cooldown ref to prevent onend from triggering an immediate restart
+
         isStoppingForSOSRef.current = true;
         recognition.stop();
-        
+
         setTimeout(() => {
           isStoppingForSOSRef.current = false;
           if (isMountedRef.current && isListeningRef.current) {
@@ -136,11 +126,10 @@ const VoiceSOSWidget = () => {
     };
 
     recognition.onerror = (event) => {
-      console.warn('🎙️ Speech recognition error:', event.error);
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed' || event.error === 'audio-capture') {
         setError(
-          event.error === 'not-allowed' 
-            ? 'Microphone access denied' 
+          event.error === 'not-allowed'
+            ? 'Microphone access denied'
             : `Speech recognition error: ${event.error}`
         );
         setIsListening(false);
@@ -149,13 +138,12 @@ const VoiceSOSWidget = () => {
     };
 
     recognition.onend = () => {
-      // Auto-restart if we are supposed to be listening and not in the middle of an SOS cooldown
       if (isMountedRef.current && isListeningRef.current && !isStoppingForSOSRef.current) {
         setTimeout(() => {
           if (isMountedRef.current && isListeningRef.current && !isStoppingForSOSRef.current) {
             try {
               recognition.start();
-            } catch (e) {
+            } catch {
               // Ignore "already started" errors
             }
           }
@@ -168,28 +156,29 @@ const VoiceSOSWidget = () => {
     return () => {
       recognition.stop();
     };
-  }, [triggerSOS]);
+  }, [supported, triggerSOS]);
 
-  // Handle start/stop based on React state
   useEffect(() => {
     if (!recognitionRef.current) return;
-    
+
     if (isListening) {
       try {
         recognitionRef.current.start();
-      } catch (e) {
+      } catch {
         // Ignore "already started" errors
       }
     } else {
       try {
         recognitionRef.current.stop();
-      } catch (e) {}
+      } catch {
+        // Ignore stop errors
+      }
     }
   }, [isListening]);
 
   const toggleListening = () => {
     if (!supported) {
-      alert("Voice recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
+      setError('Voice recognition is not supported in this browser.');
       return;
     }
     setError(null);
@@ -202,7 +191,11 @@ const VoiceSOSWidget = () => {
   if (!supported) return null;
 
   return (
-    <div className="fixed bottom-24 right-6 z-50 flex flex-col items-end gap-2">
+    <motion.div
+      drag
+      dragMomentum={false}
+      className="fixed bottom-24 right-6 z-50 flex flex-col items-end gap-2 cursor-move"
+    >
       {isListening && (
         <div className="flex flex-col items-end gap-1">
           <div className="bg-white/90 backdrop-blur border border-rose-200 shadow-lg px-4 py-2 rounded-xl flex items-center gap-2 animate-pulse">
@@ -211,12 +204,12 @@ const VoiceSOSWidget = () => {
           </div>
           {lastHeard && (
             <div className="bg-white/80 backdrop-blur border border-slate-200 shadow px-3 py-1.5 rounded-lg text-[10px] text-slate-500 max-w-[200px] truncate">
-              Heard: "{lastHeard}"
+              Heard: &ldquo;{lastHeard}&rdquo;
             </div>
           )}
         </div>
       )}
-      
+
       {error && (
         <div className="bg-white/90 backdrop-blur border border-rose-200 shadow-lg px-4 py-2 rounded-xl text-xs font-bold text-rose-600">
           {error}
@@ -227,14 +220,14 @@ const VoiceSOSWidget = () => {
         onClick={toggleListening}
         title="Safe Walk Mode (Voice SOS)"
         className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${
-          isListening 
-            ? 'bg-rose-500 text-white shadow-rose-500/40 animate-pulse scale-110' 
+          isListening
+            ? 'bg-rose-500 text-white shadow-rose-500/40 animate-pulse scale-110'
             : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
         }`}
       >
         {isListening ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
       </button>
-    </div>
+    </motion.div>
   );
 };
 

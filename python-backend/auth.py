@@ -3,16 +3,29 @@ JWT Authentication & Password Hashing — SheShield Backend
 Equivalent to the auth middleware in the Node.js server.js
 """
 import os
+import secrets
+import logging
 from datetime import datetime, timedelta, timezone
 
 import jwt
 from passlib.context import CryptContext
 from fastapi import Request, HTTPException
 
+logger = logging.getLogger("sheshield.auth")
+
 # Password hashing context — bcrypt with 12 rounds (passlib default, compatible with Node bcryptjs)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-JWT_SECRET = os.getenv("JWT_SECRET", "secret")
+
+def _resolve_jwt_secret() -> str:
+    env_secret = os.getenv("JWT_SECRET", "").strip()
+    if env_secret:
+        return env_secret
+    logger.warning("⚠️  JWT_SECRET not set in environment — using generated ephemeral secret for this instance.")
+    return secrets.token_hex(32)
+
+
+JWT_SECRET = _resolve_jwt_secret()
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_DAYS = 7
 

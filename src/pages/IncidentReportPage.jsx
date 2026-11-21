@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { routeService } from '../services/routeService';
 import {
   AlertTriangle,
   MapPin,
@@ -10,6 +11,7 @@ import {
   Send,
   Loader2,
   FileCheck2,
+  Compass,
   Image as ImageIcon
 } from 'lucide-react';
 
@@ -20,8 +22,11 @@ const IncidentReportPage = () => {
     location: '',
     type: 'Harassment',
     severity: 'Medium',
+    lat: '',
+    lon: ''
   });
   const [loading, setLoading] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [reportedId, setReportedId] = useState('');
@@ -38,11 +43,59 @@ const IncidentReportPage = () => {
   };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'location' ? { lat: '', lon: '' } : {})
+    }));
     setError('');
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setLocating(true);
+    setError('');
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude.toFixed(6);
+        const lon = position.coords.longitude.toFixed(6);
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=en`,
+            {
+              headers: { 'User-Agent': 'WomenSafetyApp/1.0' }
+            }
+          );
+          const data = await response.json();
+          setFormData((prev) => ({
+            ...prev,
+            location: data?.display_name || `${lat}, ${lon}`,
+            lat: String(lat),
+            lon: String(lon)
+          }));
+        } catch {
+          setFormData((prev) => ({
+            ...prev,
+            location: `${lat}, ${lon}`,
+            lat: String(lat),
+            lon: String(lon)
+          }));
+        } finally {
+          setLocating(false);
+        }
+      },
+      () => {
+        setError('Unable to detect your GPS location. Please enter the location manually.');
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
   const handleSubmit = async (e) => {
@@ -55,9 +108,32 @@ const IncidentReportPage = () => {
     }
 
     setLoading(true);
+    setError('');
     try {
+      let resolvedLat = formData.lat;
+      let resolvedLon = formData.lon;
+
+      // Geocode the text address if GPS coordinates weren't already captured
+      if (!resolvedLat || !resolvedLon) {
+        try {
+          const coords = await routeService.getCoordinates(location);
+          if (coords && !isNaN(coords.lat) && !isNaN(coords.lon)) {
+            resolvedLat = String(coords.lat);
+            resolvedLon = String(coords.lon);
+          }
+        } catch {
+          // Continue saving report even if geocoding fails for a free-form address
+        }
+      }
+
       const uploadData = new FormData();
-      Object.keys(formData).forEach(key => uploadData.append(key, formData[key]));
+      uploadData.append('title', formData.title);
+      uploadData.append('description', formData.description);
+      uploadData.append('location', formData.location);
+      uploadData.append('type', formData.type);
+      uploadData.append('severity', formData.severity);
+      uploadData.append('lat', resolvedLat);
+      uploadData.append('lon', resolvedLon);
       if (mediaFile) {
         uploadData.append('media', mediaFile);
       }
@@ -65,18 +141,20 @@ const IncidentReportPage = () => {
       const data = await api.post('/incidents/report', uploadData);
       if (data.success) {
         setSuccess(true);
-        setReportedId(data.report.id);
+        setReportedId(data.report?._id || data.report?.id || 'LOGGED');
         setFormData({
           title: '',
           description: '',
           location: '',
           type: 'Harassment',
           severity: 'Medium',
+          lat: '',
+          lon: ''
         });
         setMediaFile(null);
       }
     } catch (err) {
-      setError('An error occurred while logging your report. Please try again.');
+      setError(err.message || 'An error occurred while logging your report. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -110,20 +188,20 @@ const IncidentReportPage = () => {
               </div>
               <h2 className="text-xl font-bold text-slate-800 mb-2">Incident Logged Securely!</h2>
               <p className="text-slate-600 text-sm max-w-sm mx-auto leading-relaxed mb-5">
-                Your report has been encrypted and saved. Other users will receive safety indicators based on this entry.
+                Your report has been saved and mapped onto the live safety layer so Safe Routes can automatically avoid this danger zone.
               </p>
               <div className="bg-slate-50/80 border border-slate-200/60 p-3.5 rounded-xl text-xs text-slate-500 mb-6 max-w-xs mx-auto shadow-sm">
                 Report ID: <strong className="text-slate-800 font-mono select-all bg-white px-1.5 py-0.5 border border-slate-200/60 rounded">{reportedId}</strong>
               </div>
               <div className="flex flex-col sm:flex-row gap-3 justify-center w-full max-w-xs">
-                <button 
-                  onClick={() => setSuccess(false)} 
+                <button
+                  onClick={() => setSuccess(false)}
                   className="py-2.5 px-4 bg-gradient-to-r from-primary-dark to-primary hover:from-primary hover:to-accent text-white font-bold text-xs rounded-xl shadow-[0_4px_14px_rgba(255,141,161,0.2)] flex justify-center items-center gap-1.5 transition-all duration-200 active:scale-[0.98]"
                 >
                   Log Another Report
                 </button>
-                <button 
-                  onClick={() => navigate('/my-reports')} 
+                <button
+                  onClick={() => navigate('/my-reports')}
                   className="py-2.5 px-4 bg-white/70 hover:bg-white/95 border border-slate-200/60 hover:border-slate-300 hover:shadow-sm text-slate-700 font-bold text-xs rounded-xl flex justify-center items-center gap-1.5 transition-all duration-200 active:scale-[0.98]"
                 >
                   Browse My Reports
@@ -156,10 +234,10 @@ const IncidentReportPage = () => {
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
                     <label className="input-label text-slate-600 font-bold">Incident Type</label>
-                    <select 
-                      name="type" 
-                      value={formData.type} 
-                      onChange={handleChange} 
+                    <select
+                      name="type"
+                      value={formData.type}
+                      onChange={handleChange}
                       className="input-field bg-white/80 border-slate-200/80 focus:border-primary/60 text-slate-800"
                     >
                       {incidentTypes.map((t) => (
@@ -169,10 +247,10 @@ const IncidentReportPage = () => {
                   </div>
                   <div>
                     <label className="input-label text-slate-600 font-bold">Severity Level</label>
-                    <select 
-                      name="severity" 
-                      value={formData.severity} 
-                      onChange={handleChange} 
+                    <select
+                      name="severity"
+                      value={formData.severity}
+                      onChange={handleChange}
                       className="input-field bg-white/80 border-slate-200/80 focus:border-primary/60 text-slate-800"
                     >
                       {severityLevels.map((s) => (
@@ -183,9 +261,20 @@ const IncidentReportPage = () => {
                 </div>
 
                 <div>
-                  <label className="input-label flex items-center gap-1.5 text-slate-600 font-bold">
-                    <MapPin className="w-3.5 h-3.5 text-primary-dark" /> Incident Location <span className="text-primary-dark">*</span>
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="input-label flex items-center gap-1.5 text-slate-600 font-bold mb-0">
+                      <MapPin className="w-3.5 h-3.5 text-primary-dark" /> Incident Location <span className="text-primary-dark">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleUseCurrentLocation}
+                      disabled={locating}
+                      className="text-[10px] font-bold text-primary-dark hover:text-accent flex items-center gap-1 transition-all disabled:opacity-50"
+                    >
+                      <Compass className={`w-3.5 h-3.5 text-primary-dark ${locating ? 'animate-spin' : 'animate-pulse'}`} />
+                      <span>{locating ? 'Detecting GPS...' : 'Use Current GPS Location'}</span>
+                    </button>
+                  </div>
                   <input
                     type="text"
                     name="location"
@@ -195,6 +284,11 @@ const IncidentReportPage = () => {
                     placeholder="e.g., Block B Lane 3, near Central Library"
                     className="input-field bg-white/80 border-slate-200/80 focus:border-primary/60 text-slate-800"
                   />
+                  {formData.lat && formData.lon && (
+                    <p className="text-[10px] text-emerald-600 font-semibold mt-1 ml-1">
+                      GPS Coordinates Locked: {formData.lat}, {formData.lon}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -216,16 +310,16 @@ const IncidentReportPage = () => {
                   </label>
                   <input
                     type="file"
-                    accept="image/*,video/*"
+                    accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
                     onChange={handleFileChange}
                     className="input-field bg-white/80 border-slate-200/80 focus:border-primary/60 text-slate-800 file:mr-4 file:py-1.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-500/10 file:text-primary-dark hover:file:bg-pink-500/20 cursor-pointer"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1.5 ml-1">Optional. Upload an image or short video clip for evidence.</p>
+                  <p className="text-[10px] text-slate-500 mt-1.5 ml-1">Optional. Upload an image or short video clip (max 10MB) for evidence.</p>
                 </div>
 
-                <button 
-                  type="submit"  
-                  disabled={loading} 
+                <button
+                  type="submit"
+                  disabled={loading}
                   className="w-full py-3 px-4 bg-gradient-to-r from-primary-dark to-primary hover:from-primary hover:to-accent text-white font-bold rounded-xl shadow-[0_4px_14px_rgba(255,141,161,0.3)] hover:shadow-[0_6px_20px_rgba(255,141,161,0.4)] flex justify-center items-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none mt-2"
                 >
                   {loading ? (
@@ -282,4 +376,3 @@ const IncidentReportPage = () => {
 };
 
 export default IncidentReportPage;
-

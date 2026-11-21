@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Shield, Navigation, ShieldAlert, Users, ArrowRight, PhoneCall, Lock, CheckCircle } from 'lucide-react';
@@ -40,10 +39,10 @@ const LandingPage = () => {
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         className="px-4 py-3.5 md:px-12 md:py-5 flex items-center justify-between border-b border-pink-100/50 bg-white/40 backdrop-blur-md sticky top-0 z-50">
         <div className="flex items-center gap-2">
-          <img 
-            src="/logo.jpg" 
-            alt="SheShield Logo" 
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover border border-pink-100/50 shadow-sm" 
+          <img
+            src="/logo.jpg"
+            alt="SheShield Logo"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover border border-pink-100/50 shadow-sm"
           />
           <span className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-1.5">
             SheShield <span className="hidden sm:inline-flex text-[10px] uppercase font-black tracking-widest px-2 py-0.5 bg-primary/20 rounded-full text-accent-dark">Secured</span>

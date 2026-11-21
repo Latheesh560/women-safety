@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { useAuthStore } from '../context/authStore';
 import {
@@ -20,7 +20,13 @@ import {
 } from 'lucide-react';
 
 const SettingsPage = () => {
-  const { user } = useAuthStore();
+  const { user, updateProfile } = useAuthStore();
+
+  const [editedName, setEditedName] = useState(null);
+  const [editedPhone, setEditedPhone] = useState(null);
+  const profileName = editedName !== null ? editedName : (user?.name || '');
+  const profilePhone = editedPhone !== null ? editedPhone : (user?.phone || '');
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [locationSharing, setLocationSharing] = useState(true);
@@ -97,13 +103,23 @@ const SettingsPage = () => {
     setSuccess(false);
     setError('');
     try {
-      // Save settings
-      await api.post('/user/settings', { notificationsEnabled, locationSharing });
-      
-      // Save guardians (only non-empty ones)
       const validGuardians = guardians.filter(g => g.name.trim() && g.phone.trim());
+      for (const g of validGuardians) {
+        const cleanedPhone = g.phone.replace(/[^\d+]/g, '');
+        if (cleanedPhone.length < 10) {
+          setError(`Please enter a valid 10-digit phone number for guardian "${g.name}".`);
+          setLoading(false);
+          return;
+        }
+      }
+
+      if (profileName.trim() && profilePhone.trim()) {
+        await updateProfile({ name: profileName.trim(), phone: profilePhone.trim() });
+      }
+
+      await api.post('/user/settings', { notificationsEnabled, locationSharing });
       await api.post('/guardians', { guardians: validGuardians });
-      
+
       setSuccess(true);
       setTimeout(() => setSuccess(false), 4000);
     } catch (err) {
@@ -115,10 +131,8 @@ const SettingsPage = () => {
   };
 
   const handleResetDatabase = () => {
-    if (window.confirm("Are you sure you want to log out and clear local data? Your data in the database will be preserved.")) {
-      localStorage.clear();
-      window.location.href = "/";
-    }
+    localStorage.clear();
+    window.location.href = '/';
   };
 
   if (fetching) {
@@ -196,29 +210,41 @@ const SettingsPage = () => {
               <div className="p-2 bg-slate-50 rounded-xl text-slate-400">
                 <User className="w-4.5 h-4.5" />
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Full Name</span>
-                <p className="text-sm font-extrabold text-slate-700 mt-0.5">{user?.name || 'User'}</p>
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={(e) => { setEditedName(e.target.value); setSuccess(false); }}
+                  placeholder="Your Name"
+                  className="w-full text-sm font-extrabold text-slate-700 mt-0.5 bg-transparent border-b border-transparent focus:border-primary/60 outline-none"
+                />
               </div>
             </div>
-            
+
             <div className="p-4 bg-white/80 border border-pink-100/50 rounded-2xl hover:border-primary-light/60 transition-all duration-200 shadow-sm flex items-center gap-3">
               <div className="p-2 bg-slate-50 rounded-xl text-slate-400">
                 <Mail className="w-4.5 h-4.5" />
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Email Address</span>
                 <p className="text-sm font-extrabold text-slate-700 mt-0.5 truncate max-w-[200px]">{user?.email || 'Not set'}</p>
               </div>
             </div>
-            
+
             <div className="p-4 bg-white/80 border border-pink-100/50 rounded-2xl hover:border-primary-light/60 transition-all duration-200 shadow-sm flex items-center gap-3 sm:col-span-2 md:col-span-1">
               <div className="p-2 bg-slate-50 rounded-xl text-slate-400">
                 <Phone className="w-4.5 h-4.5" />
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Phone</span>
-                <p className="text-sm font-extrabold text-slate-700 mt-0.5">{user?.phone || 'Not set'}</p>
+                <input
+                  type="tel"
+                  value={profilePhone}
+                  onChange={(e) => { setEditedPhone(e.target.value); setSuccess(false); }}
+                  placeholder="Your Phone"
+                  className="w-full text-sm font-extrabold text-slate-700 mt-0.5 bg-transparent border-b border-transparent focus:border-primary/60 outline-none"
+                />
               </div>
             </div>
           </div>
@@ -363,7 +389,18 @@ const SettingsPage = () => {
                       type="tel" 
                       value={g.phone} 
                       onChange={(e) => handleGuardianChange(idx, 'phone', e.target.value)} 
-                      placeholder="Phone Number" 
+                      placeholder="10-digit Phone Number" 
+                      className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50/50 border border-slate-200/80 rounded-xl outline-none focus:bg-white focus:border-primary/50 transition-all" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="input-label text-[10px] text-slate-500 font-bold block mb-1">Email (Optional)</label>
+                    <input 
+                      type="email" 
+                      value={g.email || ''} 
+                      onChange={(e) => handleGuardianChange(idx, 'email', e.target.value)} 
+                      placeholder="guardian@example.com" 
                       className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50/50 border border-slate-200/80 rounded-xl outline-none focus:bg-white focus:border-primary/50 transition-all" 
                     />
                   </div>
@@ -389,13 +426,33 @@ const SettingsPage = () => {
           </p>
           
           <div className="ml-9">
-            <button
-              type="button"
-              onClick={handleResetDatabase}
-              className="px-5 py-3 bg-white/70 hover:bg-danger/10 border border-slate-200 hover:border-danger/35 text-slate-600 hover:text-danger-dark font-extrabold rounded-xl text-xs flex items-center gap-2 transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Clear Session & Logout
-            </button>
+            {!confirmLogout ? (
+              <button
+                type="button"
+                onClick={() => setConfirmLogout(true)}
+                className="px-5 py-3 bg-white/70 hover:bg-danger/10 border border-slate-200 hover:border-danger/35 text-slate-600 hover:text-danger-dark font-extrabold rounded-xl text-xs flex items-center gap-2 transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Clear Session & Logout
+              </button>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-bold text-danger-dark">Confirm logging out and clearing local session?</span>
+                <button
+                  type="button"
+                  onClick={handleResetDatabase}
+                  className="px-4 py-2 bg-danger text-white font-bold rounded-xl text-xs hover:bg-danger-dark transition-all"
+                >
+                  Yes, Logout
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmLogout(false)}
+                  className="px-4 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         </section>
 
